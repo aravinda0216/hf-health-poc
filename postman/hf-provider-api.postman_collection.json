@@ -1,0 +1,2354 @@
+{
+  "info": {
+    "name": "Healthcare AI Factory: Provider API (S1)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Provider-facing synthetic API: claim status, authorization status, eligibility, appeals, payments and onboarding.\n\n1. Build the data: `make demo`\n2. Start the API: `make serve` (http://localhost:8080)\n3. Import this collection, then run it with the Collection Runner.\n\nRun the folders in order. A few requests change state (filing an appeal, submitting a document or availability, opening a ticket); restart `make serve` to reset that state. All data is synthetic."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Fetch a bearer token once and refresh it before it expires (tokens last 1 hour).",
+          "const exp = Number(pm.collectionVariables.get('token_expiry') || 0);",
+          "const isTokenCall = pm.request.url.getPath().endsWith('/oauth/token');",
+          "if (!isTokenCall && (!pm.collectionVariables.get('access_token') || Date.now() > exp)) {",
+          "  pm.sendRequest({ url: pm.variables.replaceIn('{{base_url}}/v1/oauth/token'), method: 'POST',",
+          "    header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "    body: { mode: 'urlencoded', urlencoded: [{ key: 'grant_type', value: 'client_credentials' }, { key: 'client_id', value: pm.variables.replaceIn('{{client_id}}') }, { key: 'client_secret', value: pm.variables.replaceIn('{{client_secret}}') }] }",
+          "  }, function (err, res) {",
+          "    if (err || res.code !== 200) { console.error('Token request failed', err || res.text()); return; }",
+          "    pm.collectionVariables.set('access_token', res.json().access_token);",
+          "    pm.collectionVariables.set('token_expiry', String(Date.now() + 3300000));",
+          "  });",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "client_id",
+      "value": "hf-demo-client"
+    },
+    {
+      "key": "client_secret",
+      "value": "demo-secret-change-me"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "token_expiry",
+      "value": "0"
+    },
+    {
+      "key": "pcs01_claim_id",
+      "value": "4b255767-3a97-5f3a-b23f-799b06d7e9b6"
+    },
+    {
+      "key": "pcs01_npi",
+      "value": "9016859503"
+    },
+    {
+      "key": "pcs01_tin",
+      "value": "99-9644172"
+    },
+    {
+      "key": "pcs02_claim_id",
+      "value": "00f0921a-b1f1-58dd-94be-59c0f15e2c75"
+    },
+    {
+      "key": "pcs02_npi",
+      "value": "9015830034"
+    },
+    {
+      "key": "pcs02_tin",
+      "value": "99-9120527"
+    },
+    {
+      "key": "pcs03_claim_id",
+      "value": "276c0400-9a0c-5648-9982-ad9662d136f3"
+    },
+    {
+      "key": "pcs03_npi",
+      "value": "9015038133"
+    },
+    {
+      "key": "pcs03_tin",
+      "value": "99-8806340"
+    },
+    {
+      "key": "pcs04_claim_id",
+      "value": "7ef39f4d-c6e5-5b09-86c2-6f0150521a54"
+    },
+    {
+      "key": "pcs04_npi",
+      "value": "9015909226"
+    },
+    {
+      "key": "pcs04_tin",
+      "value": "99-9225256"
+    },
+    {
+      "key": "pap01_claim_id",
+      "value": "a3fe4836-7315-5471-888f-d9b8c3b2789c"
+    },
+    {
+      "key": "pap01_npi",
+      "value": "9017017887"
+    },
+    {
+      "key": "pap01_tin",
+      "value": "99-9644172"
+    },
+    {
+      "key": "ppi01_claim_id",
+      "value": "22d5c73c-50f3-5386-9b7e-6699454fed51"
+    },
+    {
+      "key": "ppi01_npi",
+      "value": "9013929473"
+    },
+    {
+      "key": "ppi01_tin",
+      "value": "99-8282695"
+    },
+    {
+      "key": "ppi02_claim_id",
+      "value": "c9e9e7ef-c73f-55f3-bf42-ef0d9645ceeb"
+    },
+    {
+      "key": "ppi02_npi",
+      "value": "9015354894"
+    },
+    {
+      "key": "ppi02_tin",
+      "value": "99-8911069"
+    },
+    {
+      "key": "ppi03_claim_id",
+      "value": "2f69e091-3687-5ae2-bfea-cdc73df678a2"
+    },
+    {
+      "key": "ppi03_npi",
+      "value": "9015117325"
+    },
+    {
+      "key": "ppi03_tin",
+      "value": "99-8806340"
+    },
+    {
+      "key": "ppi03b_claim_id",
+      "value": "8a067c10-b053-5196-82f4-16eb72c582e8"
+    },
+    {
+      "key": "ppi03b_npi",
+      "value": "9015117325"
+    },
+    {
+      "key": "ppi03b_tin",
+      "value": "99-8806340"
+    },
+    {
+      "key": "ppi04_claim_id",
+      "value": "e4b87eae-f870-5ec9-9705-884792eacced"
+    },
+    {
+      "key": "ppi04_npi",
+      "value": "9014008665"
+    },
+    {
+      "key": "ppi04_tin",
+      "value": "99-8387424"
+    },
+    {
+      "key": "pon04claim_claim_id",
+      "value": "5287a58b-034f-5e64-af97-a0f5bbcc5e3b"
+    },
+    {
+      "key": "pon04claim_npi",
+      "value": "9013691909"
+    },
+    {
+      "key": "pon04claim_tin",
+      "value": "99-8177966"
+    },
+    {
+      "key": "pas01_auth_id",
+      "value": "7e9e8ad2-f555-5514-9b28-d7815397b6ee"
+    },
+    {
+      "key": "pas01_npi",
+      "value": "9016542745"
+    },
+    {
+      "key": "pas01_tin",
+      "value": "99-9434714"
+    },
+    {
+      "key": "pas02_auth_id",
+      "value": "bb64938c-f530-5ea1-a228-528f1fa7668a"
+    },
+    {
+      "key": "pas02_npi",
+      "value": "9012662430"
+    },
+    {
+      "key": "pas02_tin",
+      "value": "99-7759050"
+    },
+    {
+      "key": "pas03_auth_id",
+      "value": "f99a381f-f82a-513c-b272-11ebafb577b7"
+    },
+    {
+      "key": "pas03_npi",
+      "value": "9012345671"
+    },
+    {
+      "key": "pas03_tin",
+      "value": "99-7654321"
+    },
+    {
+      "key": "pas04_auth_id",
+      "value": "7f382720-2c97-5657-88db-6448c91fedc8"
+    },
+    {
+      "key": "pas04_npi",
+      "value": "9015038133"
+    },
+    {
+      "key": "pas04_tin",
+      "value": "99-8806340"
+    },
+    {
+      "key": "pap02_appeal_id",
+      "value": "ac023963-18fb-5af6-bd07-cbf6928a335a"
+    },
+    {
+      "key": "pap02_npi",
+      "value": "9015830034"
+    },
+    {
+      "key": "pap02_tin",
+      "value": "99-9120527"
+    },
+    {
+      "key": "pap03_appeal_id",
+      "value": "a6e88299-35be-5bc4-9865-f89b9c72c1ba"
+    },
+    {
+      "key": "pap03_npi",
+      "value": "9013771099"
+    },
+    {
+      "key": "pap03_tin",
+      "value": "99-8282695"
+    },
+    {
+      "key": "pap04_appeal_id",
+      "value": "2ca7d00e-805b-5a76-b38a-00b74b65ddd1"
+    },
+    {
+      "key": "pap04_npi",
+      "value": "9014087859"
+    },
+    {
+      "key": "pap04_tin",
+      "value": "99-8387424"
+    },
+    {
+      "key": "pon01_npi",
+      "value": "9013454332"
+    },
+    {
+      "key": "pon01_tin",
+      "value": "99-8073237"
+    },
+    {
+      "key": "pon02_npi",
+      "value": "9013533523"
+    },
+    {
+      "key": "pon02_tin",
+      "value": "99-8177966"
+    },
+    {
+      "key": "pon03_npi",
+      "value": "9013612715"
+    },
+    {
+      "key": "pon03_tin",
+      "value": "99-8177966"
+    },
+    {
+      "key": "pon04_npi",
+      "value": "9013691909"
+    },
+    {
+      "key": "pon04_tin",
+      "value": "99-8177966"
+    },
+    {
+      "key": "pev_npi",
+      "value": "9012345671"
+    },
+    {
+      "key": "pev_tin",
+      "value": "99-7654321"
+    },
+    {
+      "key": "pev01_member_id",
+      "value": "7c496cac-26f5-5b00-839d-b42339a7e019"
+    },
+    {
+      "key": "pev02_member_id",
+      "value": "0fa837fd-2c2e-5cc5-a327-41095a370129"
+    },
+    {
+      "key": "pev03_member_id",
+      "value": "61806286-f080-5051-8fe5-d25c1c7cfb1b"
+    },
+    {
+      "key": "pon03_location_id",
+      "value": "8656e71e-ccd2-599c-91e7-69b88ff7ff81"
+    },
+    {
+      "key": "pev_dos",
+      "value": "2026-10-01"
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Auth",
+      "description": "The collection fetches a token by itself before the first call; run this only to inspect the token response.",
+      "item": [
+        {
+          "name": "Create access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/oauth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "oauth",
+                "token"
+              ],
+              "query": []
+            },
+            "description": "Optional: the collection pre-request script fetches and refreshes the token automatically.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('bearer token returned', function () { pm.expect(j.access_token).to.be.a('string'); });",
+                  "pm.collectionVariables.set('access_token', j.access_token); pm.collectionVariables.set('token_expiry', String(Date.now() + 3300000));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1 Common",
+      "description": "",
+      "item": [
+        {
+          "name": "Verify identity (provider)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/identity/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "identity",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"PROVIDER\",\n  \"npi\": \"{{pcs01_npi}}\",\n  \"tin\": \"{{pcs01_tin}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"verified is true\", function () { pm.expect(j.verified === true).to.be.ok; });",
+                  "pm.test(\"verification id returned\", function () { pm.expect(j.verification_id).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Verify identity (provider, wrong TIN)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/identity/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "identity",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"PROVIDER\",\n  \"npi\": \"{{pcs01_npi}}\",\n  \"tin\": \"99-0000000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"not verified\", function () { pm.expect(j.verified === false).to.be.ok; });",
+                  "pm.test(\"no verification id\", function () { pm.expect(j.verification_id === null).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search knowledge (grounded)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/knowledge/search?q=claim denied for missing information&audience=PROVIDER&top_k=3",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "knowledge",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "claim denied for missing information"
+                },
+                {
+                  "key": "audience",
+                  "value": "PROVIDER"
+                },
+                {
+                  "key": "top_k",
+                  "value": "3"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"not abstaining\", function () { pm.expect(j.abstain === false).to.be.ok; });",
+                  "pm.test(\"results have citations\", function () { pm.expect(j.results.length > 0 && j.results[0].chunk_id).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search knowledge (should abstain)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/knowledge/search?q=What is the CEO's salary&audience=PROVIDER",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "knowledge",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "What is the CEO's salary"
+                },
+                {
+                  "key": "audience",
+                  "value": "PROVIDER"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"abstains\", function () { pm.expect(j.abstain === true).to.be.ok; });",
+                  "pm.test(\"no results returned\", function () { pm.expect(j.results.length === 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2 PCS claim status",
+      "description": "",
+      "item": [
+        {
+          "name": "PCS-01 Paid claim",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs01_claim_id}}/status?npi={{pcs01_npi}}&tin={{pcs01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs01_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs01_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"status PAID\", function () { pm.expect(j.status === 'PAID').to.be.ok; });",
+                  "pm.test(\"payment trace present\", function () { pm.expect(j.payment && j.payment.trace_no).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PCS-02 Pended for records",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs02_claim_id}}/status?npi={{pcs02_npi}}&tin={{pcs02_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs02_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs02_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs02_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"pend reason RECORDS_REQUEST\", function () { pm.expect(j.pend && j.pend.reason === 'RECORDS_REQUEST').to.be.ok; });",
+                  "pm.test(\"cites a source\", function () { pm.expect(j.sources.length > 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PCS-03 Denied, missing information",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs03_claim_id}}/status?npi={{pcs03_npi}}&tin={{pcs03_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs03_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs03_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs03_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"denied CO-16\", function () { pm.expect(j.denial && j.denial.carc === 'CO-16').to.be.ok; });",
+                  "pm.test(\"member cannot be billed\", function () { pm.expect(j.denial.member_can_be_billed === false).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PCS-04 Wrong TIN (verification fails)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs04_claim_id}}/status?npi={{pcs04_npi}}&tin=99-0000000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs04_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs04_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "99-0000000"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', function () { pm.response.to.have.status(403); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"VERIFICATION_FAILED\", function () { pm.expect(j.error.code === 'VERIFICATION_FAILED').to.be.ok; });",
+                  "pm.test(\"no claim data leaked\", function () { pm.expect(j.status === undefined).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3 PAS authorization status",
+      "description": "",
+      "item": [
+        {
+          "name": "PAS-01 Routine, in review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/authorizations/{{pas01_auth_id}}/status?npi={{pas01_npi}}&tin={{pas01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "authorizations",
+                "{{pas01_auth_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pas01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pas01_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"IN_REVIEW\", function () { pm.expect(j.status === 'IN_REVIEW').to.be.ok; });",
+                  "pm.test(\"hours remaining positive\", function () { pm.expect(j.hours_remaining > 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAS-02 Urgent SNF, needs discharge summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/authorizations/{{pas02_auth_id}}/status?npi={{pas02_npi}}&tin={{pas02_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "authorizations",
+                "{{pas02_auth_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pas02_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pas02_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"urgent, expedited\", function () { pm.expect(j.urgency === 'URGENT' && j.routing === 'EXPEDITED_REVIEW').to.be.ok; });",
+                  "pm.test(\"discharge summary missing\", function () { pm.expect(j.missing_documents.some(function (d) { return d.doc_type === 'DISCHARGE_SUMMARY'; })).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAS-03 Missing PT evaluation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/authorizations/{{pas03_auth_id}}/status?npi={{pas03_npi}}&tin={{pas03_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "authorizations",
+                "{{pas03_auth_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pas03_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pas03_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"clock paused\", function () { pm.expect(j.clock_paused === true).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAS-04 Denied, reviewer name withheld",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/authorizations/{{pas04_auth_id}}/status?npi={{pas04_npi}}&tin={{pas04_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "authorizations",
+                "{{pas04_auth_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pas04_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pas04_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"DENIED\", function () { pm.expect(j.determination.outcome === 'DENIED').to.be.ok; });",
+                  "pm.test(\"reviewer name is null\", function () { pm.expect(j.determination.reviewer.name === null).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Submit document (PAS-02 discharge summary)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/authorizations/{{pas02_auth_id}}/documents",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "authorizations",
+                "{{pas02_auth_id}}",
+                "documents"
+              ],
+              "query": []
+            },
+            "description": "Idempotent: sending the same file again returns the same upload id. Content is never read, only metadata.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pas02_npi}}\",\n  \"tin\": \"{{pas02_tin}}\",\n  \"doc_type\": \"DISCHARGE_SUMMARY\",\n  \"file_name\": \"discharge-summary.pdf\",\n  \"size_bytes\": 48211,\n  \"sha256\": \"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\",\n  \"notes\": \"Discharge summary attached.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"upload id returned\", function () { pm.expect(j.upload_id).to.be.ok; });",
+                  "pm.test(\"expedited routing kept\", function () { pm.expect(j.routing === 'EXPEDITED_REVIEW').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4 PEV eligibility",
+      "description": "",
+      "item": [
+        {
+          "name": "PEV-01 Active member",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/eligibility/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "eligibility",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pev_npi}}\",\n  \"tin\": \"{{pev_tin}}\",\n  \"date_of_service\": \"{{pev_dos}}\",\n  \"members\": [\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"ACTIVE\", function () { pm.expect(j.results[0].coverage_status === 'ACTIVE').to.be.ok; });",
+                  "pm.test(\"PCP and reference number present\", function () { pm.expect(j.results[0].pcp && j.results[0].reference_number).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PEV-02 Termed retroactively",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/eligibility/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "eligibility",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pev_npi}}\",\n  \"tin\": \"{{pev_tin}}\",\n  \"date_of_service\": \"2026-10-12\",\n  \"members\": [\n    {\n      \"member_id\": \"{{pev02_member_id}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"TERMED on that date\", function () { pm.expect(j.results[0].coverage_status === 'TERMED').to.be.ok; });",
+                  "pm.test(\"not-a-guarantee disclaimer\", function () { pm.expect(j.disclaimer.indexOf('not a guarantee') >= 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PEV-03 Enrollment pending",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/eligibility/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "eligibility",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pev_npi}}\",\n  \"tin\": \"{{pev_tin}}\",\n  \"date_of_service\": \"{{pev_dos}}\",\n  \"members\": [\n    {\n      \"member_id\": \"{{pev03_member_id}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"PENDING\", function () { pm.expect(j.results[0].coverage_status === 'PENDING').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PEV-04 Bulk lookup blocked (6 members)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/eligibility/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "eligibility",
+                "verify"
+              ],
+              "query": []
+            },
+            "description": "Minimum necessary: at most 5 members per request.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pev_npi}}\",\n  \"tin\": \"{{pev_tin}}\",\n  \"date_of_service\": \"{{pev_dos}}\",\n  \"members\": [\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    },\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    },\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    },\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    },\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    },\n    {\n      \"member_id\": \"{{pev01_member_id}}\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 413', function () { pm.response.to.have.status(413); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"BULK_LOOKUP_LIMIT\", function () { pm.expect(j.error.code === 'BULK_LOOKUP_LIMIT').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5 PAP appeals",
+      "description": "",
+      "item": [
+        {
+          "name": "PAP-01 File a level 1 appeal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pap01_claim_id}}/appeals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pap01_claim_id}}",
+                "appeals"
+              ],
+              "query": []
+            },
+            "description": "One appeal per claim. A second call returns 409 APPEAL_EXISTS (see the next request); restart the API to clear state.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pap01_npi}}\",\n  \"tin\": \"{{pap01_tin}}\",\n  \"level\": \"L1\",\n  \"reason\": \"MED_NECESSITY\",\n  \"documents\": [\n    \"appeal_letter\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"appeal id issued\", function () { pm.expect(j.appeal_id && j.appeal_id.indexOf('APL-') === 0).to.be.ok; });",
+                  "pm.test(\"clinical notes still needed\", function () { pm.expect(j.documents_missing.indexOf('clinical_notes') >= 0).to.be.ok; });",
+                  "pm.test(\"no outcome promised\", function () { pm.expect(j.no_outcome_promised === true).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAP-01 Repeat filing returns 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pap01_claim_id}}/appeals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pap01_claim_id}}",
+                "appeals"
+              ],
+              "query": []
+            },
+            "description": "Run after the request above.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pap01_npi}}\",\n  \"tin\": \"{{pap01_tin}}\",\n  \"level\": \"L1\",\n  \"reason\": \"MED_NECESSITY\",\n  \"documents\": [\n    \"appeal_letter\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"APPEAL_EXISTS\", function () { pm.expect(j.error.code === 'APPEAL_EXISTS').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAP-01 Level 2 is escalated",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pap01_claim_id}}/appeals",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pap01_claim_id}}",
+                "appeals"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{pap01_npi}}\",\n  \"tin\": \"{{pap01_tin}}\",\n  \"level\": \"L2\",\n  \"reason\": \"MED_NECESSITY\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"LEVEL_NOT_SUPPORTED\", function () { pm.expect(j.error.code === 'LEVEL_NOT_SUPPORTED').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAP-02 Appeal in review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appeals/{{pap02_appeal_id}}?npi={{pap02_npi}}&tin={{pap02_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appeals",
+                "{{pap02_appeal_id}}"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pap02_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pap02_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"IN_REVIEW\", function () { pm.expect(j.status === 'IN_REVIEW').to.be.ok; });",
+                  "pm.test(\"decision date given\", function () { pm.expect(j.expected_decision_dt).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAP-03 Overturned, reprocessing pending",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appeals/{{pap03_appeal_id}}?npi={{pap03_npi}}&tin={{pap03_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appeals",
+                "{{pap03_appeal_id}}"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pap03_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pap03_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"OVERTURNED\", function () { pm.expect(j.outcome === 'OVERTURNED').to.be.ok; });",
+                  "pm.test(\"reprocessing pending\", function () { pm.expect(j.reprocessing.state === 'PENDING').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PAP-04 Late filing, exception review",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appeals/{{pap04_appeal_id}}?npi={{pap04_npi}}&tin={{pap04_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appeals",
+                "{{pap04_appeal_id}}"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pap04_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pap04_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"late filing\", function () { pm.expect(j.late_filing === true).to.be.ok; });",
+                  "pm.test(\"exception review\", function () { pm.expect(j.routing === 'EXCEPTION_REVIEW').to.be.ok; });",
+                  "pm.test(\"no outcome promised\", function () { pm.expect(j.no_outcome_promised === true).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6 PPI payment inquiry",
+      "description": "",
+      "item": [
+        {
+          "name": "PPI-01 Payment date, amount and trace",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi01_claim_id}}/payments?npi={{ppi01_npi}}&tin={{ppi01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi01_claim_id}}",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{ppi01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{ppi01_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"EFT with trace\", function () { pm.expect(j.payments[0].method === 'EFT' && j.payments[0].trace_no).to.be.ok; });",
+                  "pm.test(\"amount equals gross paid\", function () { pm.expect(j.payments[0].amount === j.total_paid_gross).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PPI-02 Paid less than billed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi02_claim_id}}/payments?npi={{ppi02_npi}}&tin={{ppi02_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi02_claim_id}}",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{ppi02_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{ppi02_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"CO and PR adjustments\", function () { pm.expect(j.adjustments.some(function (a) { return a.group_code === 'CO'; }) && j.adjustments.some(function (a) { return a.group_code === 'PR'; })).to.be.ok; });",
+                  "pm.test(\"paid below billed\", function () { pm.expect(j.total_paid_gross < j.total_billed).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PPI-03 Recoupment (original claim)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi03_claim_id}}/payments?npi={{ppi03_npi}}&tin={{ppi03_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi03_claim_id}}",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{ppi03_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{ppi03_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"recouped from this claim\", function () { pm.expect(j.recoupments[0].role === 'RECOUPED_FROM_THIS_CLAIM').to.be.ok; });",
+                  "pm.test(\"net below gross\", function () { pm.expect(j.net_paid_after_recoupment < j.total_paid_gross).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PPI-03 Recoupment (offset remit)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi03b_claim_id}}/payments?npi={{ppi03b_npi}}&tin={{ppi03b_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi03b_claim_id}}",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{ppi03b_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{ppi03b_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"offset on this remit\", function () { pm.expect(j.recoupments[0].role === 'OFFSET_ON_THIS_REMIT').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PPI-04 Wrong payee TIN",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi04_claim_id}}/payments?npi={{ppi04_npi}}&tin={{ppi04_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi04_claim_id}}",
+                "payments"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{ppi04_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{ppi04_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"payee does not match\", function () { pm.expect(j.payee_check.matches_billing_tin === false).to.be.ok; });",
+                  "pm.test(\"TINs are masked\", function () { pm.expect(j.payee_check.payee_tin_masked.indexOf('**-***') === 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PPI-04 Open payment correction ticket",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi04_claim_id}}/payment-corrections",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi04_claim_id}}",
+                "payment-corrections"
+              ],
+              "query": []
+            },
+            "description": "Idempotent per claim and issue: a repeat returns the same ticket with already_open true.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{ppi04_npi}}\",\n  \"tin\": \"{{ppi04_tin}}\",\n  \"issue_type\": \"WRONG_PAYEE_TIN\",\n  \"description\": \"Payment went to a different TIN than our billing TIN.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"Payment Integrity queue\", function () { pm.expect(j.queue === 'PAYMENT_INTEGRITY').to.be.ok; });",
+                  "pm.test(\"no change made\", function () { pm.expect(j.agent_actions.indexOf('No change') >= 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PPI-01 Correction refused (no mismatch)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{ppi01_claim_id}}/payment-corrections",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{ppi01_claim_id}}",
+                "payment-corrections"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"npi\": \"{{ppi01_npi}}\",\n  \"tin\": \"{{ppi01_tin}}\",\n  \"issue_type\": \"WRONG_PAYEE_TIN\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"NO_MISMATCH_DETECTED\", function () { pm.expect(j.error.code === 'NO_MISMATCH_DETECTED').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7 PON provider onboarding",
+      "description": "",
+      "item": [
+        {
+          "name": "PON-01 Contract sent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/providers/{{pon01_npi}}/onboarding?tin={{pon01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "providers",
+                "{{pon01_npi}}",
+                "onboarding"
+              ],
+              "query": [
+                {
+                  "key": "tin",
+                  "value": "{{pon01_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"stage CONTRACT_SENT\", function () { pm.expect(j.applications[0].stage === 'CONTRACT_SENT').to.be.ok; });",
+                  "pm.test(\"expected live is an estimate\", function () { pm.expect(j.applications[0].expected_live_is_estimate === true).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PON-02 Pending W-9 and contract",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/providers/{{pon02_npi}}/onboarding?tin={{pon02_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "providers",
+                "{{pon02_npi}}",
+                "onboarding"
+              ],
+              "query": [
+                {
+                  "key": "tin",
+                  "value": "{{pon02_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"two pending items\", function () { pm.expect(j.applications[0].pending_items.length === 2).to.be.ok; });",
+                  "pm.test(\"each has a due date\", function () { pm.expect(j.applications[0].pending_items.every(function (i) { return i.due_dt; })).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PON-03 Location needs availability",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/providers/{{pon03_npi}}/onboarding?tin={{pon03_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "providers",
+                "{{pon03_npi}}",
+                "onboarding"
+              ],
+              "query": [
+                {
+                  "key": "tin",
+                  "value": "{{pon03_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"one location needs attention\", function () { pm.expect(j.locations.filter(function (l) { return l.needs_attention; }).length === 1).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PON-03 Submit availability",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/providers/{{pon03_npi}}/locations/{{pon03_location_id}}/availability",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "providers",
+                "{{pon03_npi}}",
+                "locations",
+                "{{pon03_location_id}}",
+                "availability"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{pon03_tin}}\",\n  \"accepting_new_patients\": true,\n  \"telehealth\": false,\n  \"accessibility\": [\n    \"WHEELCHAIR\"\n  ],\n  \"schedule\": [\n    {\n      \"day\": \"MON\",\n      \"open\": \"08:00\",\n      \"close\": \"17:00\"\n    },\n    {\n      \"day\": \"TUE\",\n      \"open\": \"08:00\",\n      \"close\": \"17:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"availability loaded\", function () { pm.expect(j.availability_loaded === true).to.be.ok; });",
+                  "pm.test(\"2 days recorded\", function () { pm.expect(j.days_loaded === 2).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PON-03 Invalid hours rejected",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/providers/{{pon03_npi}}/locations/{{pon03_location_id}}/availability",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "providers",
+                "{{pon03_npi}}",
+                "locations",
+                "{{pon03_location_id}}",
+                "availability"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tin\": \"{{pon03_tin}}\",\n  \"accepting_new_patients\": true,\n  \"schedule\": [\n    {\n      \"day\": \"MON\",\n      \"open\": \"17:00\",\n      \"close\": \"08:00\"\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', function () { pm.response.to.have.status(422); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"VALIDATION_ERROR\", function () { pm.expect(j.error.code === 'VALIDATION_ERROR').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PON-04 Live but claims deny out of network",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/providers/{{pon04_npi}}/onboarding?tin={{pon04_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "providers",
+                "{{pon04_npi}}",
+                "onboarding"
+              ],
+              "query": [
+                {
+                  "key": "tin",
+                  "value": "{{pon04_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"lag suspected\", function () { pm.expect(j.claims_load_check.lag_suspected === true).to.be.ok; });",
+                  "pm.test(\"escalate to Network Operations\", function () { pm.expect(j.claims_load_check.escalation_queue === 'NETWORK_OPERATIONS').to.be.ok; });",
+                  "pm.test(\"do not resubmit\", function () { pm.expect(j.claims_load_check.recommended_action.indexOf('Do not resubmit') >= 0).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "8 Security and resilience",
+      "description": "",
+      "item": [
+        {
+          "name": "No token returns 401",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs01_claim_id}}/status?npi={{pcs01_npi}}&tin={{pcs01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs01_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs01_tin}}"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"error code present\", function () { pm.expect(j.error.code).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad token returns 401",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer not-a-real-token"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs01_claim_id}}/status?npi={{pcs01_npi}}&tin={{pcs01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs01_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs01_tin}}"
+                }
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 401', function () { pm.response.to.have.status(401); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"INVALID_TOKEN\", function () { pm.expect(j.error.code === 'INVALID_TOKEN').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unrelated provider gets 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs01_claim_id}}/status?npi={{pon01_npi}}&tin={{pon01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs01_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pon01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pon01_tin}}"
+                }
+              ]
+            },
+            "description": "A real provider that is not on the claim sees the same answer as a claim that does not exist."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"CLAIM_NOT_FOUND\", function () { pm.expect(j.error.code === 'CLAIM_NOT_FOUND').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Injected fault (503)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-inject-fault",
+                "value": "error"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs01_claim_id}}/status?npi={{pcs01_npi}}&tin={{pcs01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs01_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs01_tin}}"
+                }
+              ]
+            },
+            "description": "The x-inject-fault header forces a transient failure so an agent's retry logic can be tested."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 503', function () { pm.response.to.have.status(503); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"FAULT_INJECTED\", function () { pm.expect(j.error.code === 'FAULT_INJECTED').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Injected latency (800 ms)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-inject-fault",
+                "value": "latency:800"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/claims/{{pcs01_claim_id}}/status?npi={{pcs01_npi}}&tin={{pcs01_tin}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "claims",
+                "{{pcs01_claim_id}}",
+                "status"
+              ],
+              "query": [
+                {
+                  "key": "npi",
+                  "value": "{{pcs01_npi}}"
+                },
+                {
+                  "key": "tin",
+                  "value": "{{pcs01_tin}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('response is flagged synthetic', function () { pm.expect(j.is_synthetic).to.eql(true); });",
+                  "pm.test(\"took at least 800 ms\", function () { pm.expect(pm.response.responseTime >= 750).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

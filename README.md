@@ -41,3 +41,9 @@ Derived tables (accumulators, care-gap closure, TOC/care cases, OOP-cap pass) ar
 2. Swap SQLite writer for AlloyDB/BigQuery loaders behind `schema.Sink`; map knowledge search to Vertex AI Vector Search.
 3. Replace templated text with LLM generation behind a content-addressed cache (`sha256(model, prompt_version, inputs, seed)`).
 4. Add conversation seeds (transcript JSONL) from scenario rows and an LLM-driven agent eval on top of `smoke.py`.
+
+## Postman
+`postman/hf-provider-api.postman_collection.json` (42 requests, 155 assertions) and `postman/hf-local.postman_environment.json`.
+Run `make demo`, then `make serve`, import both files into Postman and run the collection folders in order; a token is fetched automatically.
+`postman/generate.py` rebuilds the files from the dataset (`python3 postman/generate.py out/dev/factory.db`). Some requests change state (file an appeal, submit a
+document, open a ticket, set availability), so restart `make serve` before re-running. CLI: `newman run postman/hf-provider-api.postman_collection.json -e postman/hf-local.postman_environment.json`.
