@@ -1,0 +1,34 @@
+{
+  "blueprint_id": "bp_ma_demo_01_v1",
+  "schema_version": "2.0",
+  "blueprint_version": "1.0.0",
+  "derived_from": "req_20261012_0141",
+  "note": "STUB: normally emitted by the Blueprint Engine. Scenario S1 from the architecture document.",
+  "repeatability": {
+    "root_seed": 20261012, "as_of_date": "2026-10-12", "catalog_version": "2.4.0", "rule_set_version": "1.8.0",
+    "generator_version": "0.1.0", "id_strategy": "UUIDv5(dataset_id, entity, seed, row_index)",
+    "llm": {"mode": "templated", "note": "v1 uses templated text; LLM + content-addressed cache is a later step"}
+  },
+  "tenant": {"id": "ma-demo-01", "env": "demo", "ttl_hours": 336},
+  "scope": {
+    "use_cases": ["PCS", "PAS", "PEV"],
+    "personas": ["BILLING", "REFERRAL", "OFFICE"],
+    "channels": ["voice", "chat"],
+    "domains": {"primary": ["C", "A", "M", "K"], "supporting": ["P", "CM"]}
+  },
+  "data_spec": {
+    "dataset_id": "ma-demo-01",
+    "volumes": {"members": 50000, "history_months": 2},
+    "distributions": {"lob_mix": {"MEDICARE_ADV": 1}, "age_by_lob": "D-02", "denial_rate": 0.10, "pend_rate": 0.05,
+                      "auth_outcome": {"APPROVED": 0.82, "PARTIAL": 0.04, "DENIED": 0.07, "PEND_WITHDRAW": 0.07}},
+    "edge_case_pct": 5,
+    "rule_sets": ["R", "T", "F", "C", "P", "A"]
+  },
+  "infra_spec": {"cloud": "GCP", "region": "us-central1", "tier": "small", "note": "POC runs on local SQLite; GCP mapping is a later step"},
+  "api_spec": {
+    "style": "REST, OpenAPI 3.1", "base_path": "/v1", "auth": "OAuth2 client credentials",
+    "fault_injection": {"error_rate_pct": 1, "latency_p95_ms": 450}, "agent_tools": true,
+    "rate_limit_rpm": 600
+  },
+  "quality_gates": ["Rule pass 100% (R/T/F/C/P/A)", "Privacy scan PASS", "API contract tests PASS", "Agent smoke test PASS"]
+}

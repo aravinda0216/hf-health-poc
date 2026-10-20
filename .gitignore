@@ -1,0 +1,9 @@
+# generated data and run outputs (rebuild with `make demo`)
+out/
+# python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+# local state databases
+*.state
+state*.db
