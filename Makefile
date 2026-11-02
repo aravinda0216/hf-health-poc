@@ -16,3 +16,9 @@ serve:        ; HF_DB=out/dev/factory.db $(PY) -m uvicorn hf_factory.api.app:fro
 serve-control: ; HF_RUNS_DIR=out/runs $(PY) -m uvicorn hf_factory.control.app:from_env --factory --port 9000
 # Drive a running control plane through s3-s8 for the sample blueprint (1,000 members).
 orchestrate:   ; $(PY) -m hf_factory.orchestrator_client --members 1000
+
+# In-memory mode: the dataset is copied into RAM at start, state vanishes on exit, nothing is written to disk. HF_SEARCH=vector adds in-memory vector search.
+serve-memory:  ; HF_PROFILE=memory HF_SEARCH=vector HF_DB=out/dev/factory.db $(PY) -m uvicorn hf_factory.api.app:from_env --factory --port 8080
+# GCP mode (needs requirements-gcp.txt, ADC and the HF_* variables in the README): dataset from GCS, knowledge search on Vertex AI.
+serve-gcp:     ; HF_PROFILE=gcp $(PY) -m uvicorn hf_factory.api.app:from_env --factory --port 8080
+docker-build:  ; docker build -t hf-factory .

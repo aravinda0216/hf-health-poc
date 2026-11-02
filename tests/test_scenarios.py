@@ -39,9 +39,11 @@ def test_deterministic(tmp_path):
     assert r1["total_rows"] == r2["total_rows"]
 
 
-def test_profiles():
+def test_profiles(monkeypatch):
     from hf_factory import profiles
     assert profiles.dataset_store("x.db", "local").path == "x.db"
     with pytest.raises(ValueError): profiles.state_store("x", "nope")
-    from hf_factory.adapters.gcp_store import NotImplementedOnGcp
-    with pytest.raises(NotImplementedOnGcp): profiles.dataset_store("x", "gcp").connect_ro()
+    monkeypatch.delenv("HF_DATASET_URI", raising=False)
+    with pytest.raises(ValueError): profiles.dataset_store("missing.db", "gcp")          # gcp needs a gs:// URI
+    from hf_factory.adapters.gcp_store import NotImplementedOnGcp, AlloyDbDataset
+    with pytest.raises(NotImplementedOnGcp): AlloyDbDataset("dsn").connect_ro()

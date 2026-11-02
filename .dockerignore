@@ -1,4 +1,6 @@
 __pycache__/
 out/
 *.db
+*.state
 .git
+tests/

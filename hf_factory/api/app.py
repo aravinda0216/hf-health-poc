@@ -1,12 +1,13 @@
 """API engine (stage s8): FastAPI service over the synthetic data. Base path /v1, OAuth2 client credentials,
 NPI+TIN verification, minimum-necessary disclosure, deterministic fault injection, audit log."""
-import asyncio, base64, hashlib, hmac, json, math, os, sqlite3, threading, time, uuid
+import asyncio, base64, hashlib, hmac, json, math, os, sqlite3, tempfile, threading, time, uuid
 from dataclasses import dataclass, field
 from types import SimpleNamespace
 from datetime import datetime, timedelta, date
 from typing import Optional
 
 from .. import profiles
+from ..search import make_backend as make_search_backend, Chunk as KbChunk
 from fastapi import APIRouter, Depends, FastAPI, Form, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
@@ -29,6 +30,7 @@ MAX_ELIG_BATCH = 5
 class Config:
     db_path: str
     state_path: str = ""
+    search_backend: object = None      # a search backend instance; None = chosen by HF_SEARCH / HF_PROFILE
     audit_path: str = ""
     client_id: str = "hf-demo-client"
     client_secret: str = field(default_factory=lambda: os.environ.get("HF_CLIENT_SECRET", "demo-secret-change-me"))
@@ -53,7 +55,7 @@ def create_app(cfg: Config) -> FastAPI:
     app = FastAPI(title="Healthcare AI Factory: Provider Services API", version="0.1.0",
                   description="Synthetic provider-facing API (claim status, authorization status, eligibility) for voice and chat agent testing. All data is synthetic.")
     local = threading.local(); lock = threading.Lock()
-    state_path = cfg.state_path or (cfg.db_path + ".state")
+    state_path = cfg.state_path or ((cfg.db_path + ".state") if not cfg.db_path.startswith("gs://") else os.path.join(tempfile.gettempdir(), "hf_state.db"))
     STATE = profiles.state_store(state_path)
     # Read-only connection to the dataset (one per thread). The API can never modify generated data, so dataset checksums stay valid.
     # Storage comes from the active profile (HF_PROFILE, default local = SQLite); see hf_factory/ports.py.
@@ -75,7 +77,7 @@ def create_app(cfg: Config) -> FastAPI:
         c.execute("CREATE TABLE IF NOT EXISTS appointments (appointment_id TEXT PRIMARY KEY, member_id TEXT, slot_id TEXT, npi TEXT, slot_start TEXT, status TEXT, reason TEXT, actor TEXT, created_dt TEXT, cancelled_dt TEXT)")
         return c
     # Dataset facts written by the data engine (as_of_date, hashes, seed).
-    meta = dict(sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True).execute("SELECT k,v FROM _meta").fetchall())
+    meta = dict(DATASET.connect_ro().execute("SELECT k,v FROM _meta").fetchall())
     # Simulated clock: 'now' is the dataset's as_of_date at noon, not the wall clock, so deadlines and hours remaining match the data.
     AS_OF = date.fromisoformat(meta["as_of_date"]); NOW = datetime(AS_OF.year, AS_OF.month, AS_OF.day, 12, 0, 0)   # simulated clock = dataset as_of
     app.state.cfg, app.state.now = cfg, NOW
@@ -373,64 +375,29 @@ def create_app(cfg: Config) -> FastAPI:
                                      disclaimer="Eligibility information is not a guarantee of payment.", scenario_id=scn)
     def _ref(mid, dos, npi): return "ELG-" + hashlib.sha1(f"{mid}|{dos}|{npi}|{meta['as_of_date']}".encode()).hexdigest()[:12].upper()
 
-    # Knowledge search: a small BM25-style index in memory over ACTIVE, in-date chunks (built on first use).
-    # ---- knowledge search (local BM25-style index; Vertex AI Vector Search is the GCP mapping)
-    idx = {}
+    # Knowledge search goes through a pluggable backend (hf_factory/search): lexical BM25 (default), in-memory vectors, or Vertex AI. The API loads the ACTIVE, in-date
+    # chunks once, hands them to the backend, and always hydrates text and citations from the dataset by chunk_id.
+    kb = {}
     def build_index():
         c = con_ro()
         rows = c.execute("""SELECT c.chunk_id,c.asset_id,c.section_path,c.text,a.title,a.asset_type,a.version,a.audience FROM asset_chunk c JOIN knowledge_asset a ON a.asset_id=c.asset_id
                             WHERE a.status='ACTIVE' AND a.effective_dt<=? AND a.expiry_dt>=?""", (meta["as_of_date"], meta["as_of_date"])).fetchall()
         links = {}
         for r in c.execute("SELECT asset_id, linked_key FROM asset_link WHERE linked_entity='USE_CASE'"): links.setdefault(r[0], set()).add(r[1])
-        docs = []
-        for r in rows:
-            toks = _tok(r["section_path"] + " " + r["text"]); docs.append((r, toks))
-        df = {}
-        for _, t in docs:
-            for w in set(t): df[w] = df.get(w, 0) + 1
-        idx.update(docs=docs, df=df, N=len(docs), links=links, avg=sum(len(t) for _, t in docs) / max(1, len(docs)))
-    SCORE_MIN = float(os.environ.get('HF_KB_SCORE_MIN', '2.0'))  # minimum BM25-style score to answer
-    COVERAGE_MIN = float(os.environ.get('HF_KB_COVERAGE_MIN', '0.4'))  # minimum idf-weighted query coverage to answer
-    # Common words ignored when scoring.
-    STOP = set("the a an and or of to in is it for on with how do i what does my this that are be can we you your will which who when where why long much many from by if as was were been has have there their".split())
-    def _tok(s):
-        import re
-        # Light stemming (plural / -ing / -ed) so "appeals" matches "appeal" and "denied" matches "denial" roots.
-        def stem(w):
-            for suf in ("ing", "ed", "es", "s"):
-                if w.endswith(suf) and len(w) - len(suf) >= 4: return w[:-len(suf)]
-            return w
-        return [stem(w) for w in re.findall(r"[a-z0-9\-]+", s.lower()) if w not in STOP]
+        chunks = [KbChunk(r["chunk_id"], r["asset_id"], r["section_path"], r["text"], r["audience"], frozenset(links.get(r["asset_id"], ()))) for r in rows]
+        backend = cfg.search_backend or make_search_backend(); backend.build(chunks)
+        kb.update(backend=backend, rows={r["chunk_id"]: r for r in rows})
     @router.get("/knowledge/search", response_model=M.KnowledgeResponse, dependencies=prot, tags=["common"], operation_id="searchKnowledge", responses=ERR,
                 summary="Search approved, active knowledge assets (grounding + citations)",
                 openapi_extra=GUARD({"when": "Needed to ground an explanation (denial codes, policies, procedures). Cite the returned source.", "never": ["Answer from memory when abstain is true"]}))
-    # Scores chunks with BM25 and favours chunks that match more of the query terms. Filters by audience (and optionally use case).
-    # Below the confidence threshold the response sets abstain=true and returns no results, so the agent says it doesn't know instead of guessing.
+    # Filters by audience (and optionally use case). Below the backend's confidence threshold the response sets abstain=true and returns no results,
+    # so the agent says it doesn't know instead of guessing.
     def search(q: str = Query(..., min_length=2, max_length=300), audience: str = Query("PROVIDER", pattern="^(PROVIDER|MEMBER|INTERNAL)$"), use_case: Optional[str] = Query(None, max_length=10), top_k: int = Query(3, ge=1, le=10)):
-        if not idx: build_index()
-        qt = _tok(q); scored = []
-        def idf_of(w):
-            d = idx["df"].get(w, 0)
-            return math.log(1 + (idx["N"] - d + .5) / (d + .5))
-        for r, t in idx["docs"]:
-            if r["audience"] != audience: continue
-            if use_case and use_case not in idx["links"].get(r["asset_id"], set()): continue
-            tf = {}
-            for w in t: tf[w] = tf.get(w, 0) + 1
-            s = 0.0
-            for w in qt:
-                if w in tf:
-                    idf = math.log(1 + (idx["N"] - idx["df"][w] + .5) / (idx["df"][w] + .5)); f = tf[w]
-                    s += idf * (f * 2.2) / (f + 1.2 * (.25 + .75 * len(t) / idx["avg"]))
-            hit = sum(1 for w in set(qt) if w in tf)
-            # idf-weighted coverage: the share of the query's information (rare words count more) that this chunk actually contains.
-            # A query word the corpus has never seen gets the maximum idf, so off-topic words ("competitor", "weather") pull coverage down.
-            cov = sum(idf_of(w) for w in set(qt) if w in tf) / max(1e-9, sum(idf_of(w) for w in set(qt)))
-            if s > 0: scored.append((s * (hit / max(1, len(set(qt))) ** 0.5), r, cov))
-        scored.sort(key=lambda x: -x[0]); top = scored[:top_k]
-        # Abstain when nothing scores, the best score is weak, or the best chunk covers too little of what was asked (stops partial-word matches from answering off-topic questions).
-        abstain = (not top) or top[0][0] < SCORE_MIN or top[0][2] < COVERAGE_MIN
-        hits = [M.KnowledgeHit(chunk_id=r["chunk_id"], asset_id=r["asset_id"], asset_title=r["title"], asset_type=r["asset_type"], version=r["version"], section_path=r["section_path"], text=r["text"], score=round(s, 3)) for s, r, _c in top]
+        if not kb: build_index()
+        res = kb["backend"].query(q, audience, use_case, top_k)
+        hits = [M.KnowledgeHit(chunk_id=r["chunk_id"], asset_id=r["asset_id"], asset_title=r["title"], asset_type=r["asset_type"], version=r["version"], section_path=r["section_path"], text=r["text"], score=sc)
+                for cid, sc in res.hits for r in [kb["rows"].get(cid)] if r is not None]
+        abstain = res.abstain or not hits
         return M.KnowledgeResponse(query=q, abstain=abstain, results=([] if abstain else hits), note=("Confidence below threshold: do not answer from memory; abstain or escalate." if abstain else None))
 
     # The appeals, payments and onboarding endpoints live in provider_ext.py; they share this module's helpers through a small namespace.
@@ -454,7 +421,7 @@ def _erfinv(x):
 def from_env():
     # HF_ENABLED_OPS (comma list of operationIds) restricts the exposed endpoints; the control plane's s8 result prints a ready-made run_command.
     ops = os.environ.get("HF_ENABLED_OPS")
-    cfg = Config(db_path=os.environ["HF_DB"], state_path=os.environ.get("HF_STATE_DB", ""), audit_path=os.environ.get("HF_AUDIT", ""), fault_enabled=os.environ.get("HF_FAULT", "on") == "on",
+    cfg = Config(db_path=os.environ.get("HF_DB") or os.environ["HF_DATASET_URI"], state_path=os.environ.get("HF_STATE_DB", ""), audit_path=os.environ.get("HF_AUDIT", ""), fault_enabled=os.environ.get("HF_FAULT", "on") == "on",
                  fault_error_pct=float(os.environ.get("HF_FAULT_ERROR_PCT", "1")), fault_latency_p95_ms=int(os.environ.get("HF_FAULT_P95_MS", "450")),
                  rate_limit_rpm=int(os.environ.get("HF_RPM", "600")), enabled_ops=set(ops.split(",")) if ops else None)
     return create_app(cfg)

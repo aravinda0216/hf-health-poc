@@ -17,4 +17,6 @@ Postman: `postman/hf-provider-api.postman_collection.json` (S1) and `postman/hf-
 | S3 | `s3_commercial_scale.json` | Commercial, 150k members, ~1M claims, 30% denials, 30% edge |
 | S4 | `s4_commercial_sandbox.json` | Commercial sandbox, 20k members, MBN/MCI/PCS |
 
-Docker: `docker build -t hf-factory .`, run with `HF_ROLE=api|control|job`. The image has not been built (no Docker daemon here); the entrypoint was exercised directly for the `api` and `control` roles.
+In-memory: `make serve-memory`. GCP: see the README "Run modes" (`gcp_publish`, then `make serve-gcp`).
+
+Docker: `docker build -t hf-factory .` (add `--build-arg INSTALL_GCP=1` for GCP), run with `HF_ROLE=api|control|job|publish`, or `docker compose up`. The image has not been built (no Docker daemon here); the entrypoint was exercised directly.

@@ -1,0 +1,13 @@
+# Local containers. The `api` service runs entirely in memory; `control` is the stage-job API. Build the dataset first:  make demo
+services:
+  api:
+    build: .
+    environment: { HF_ROLE: api, HF_PROFILE: memory, HF_SEARCH: vector, HF_DB: /data/dev/factory.db, HF_FAULT: "off", PORT: "8080" }
+    volumes: ["./out:/data:ro"]
+    ports: ["8080:8080"]
+  control:
+    build: .
+    environment: { HF_ROLE: control, PORT: "9000" }
+    volumes: ["hf-runs:/data/runs"]
+    ports: ["9000:9000"]
+volumes: { hf-runs: {} }
