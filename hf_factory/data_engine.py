@@ -18,6 +18,7 @@ class DataRun:
         self.vol = ds["volumes"]
         # Run context: everything derives from the blueprint's dataset_id, root_seed and as_of_date.
         self.ctx = Ctx(ds["dataset_id"], rp["root_seed"], rp["as_of_date"], ds["edge_case_pct"], self.vol)
+        dist = ds.get("distributions", {}); self.ctx.lob_mix = dist.get("lob_mix", {"MEDICARE_ADV": 1}); self.ctx.dist = {k: dist[k] for k in blueprint.DIST_KEYS if k in dist}
         # resume_done: stages already completed in an earlier process (control-plane restart). The database is kept and the stage objects are rebuilt from the seed.
         self.con = schema.connect(db_path, fresh=not resume_done)
         if not resume_done: schema.create_all(self.con)

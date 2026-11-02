@@ -225,8 +225,9 @@ class ClaimsAuth:
         else:
             ctype = r.weighted([("PRO",45),("RX",40),("FAC",15)])
             if ctype == "FAC": ctype = r.weighted([("FAC_IP",60),("FAC_OP",25),("FAC_SNF",15)])
-            # Random claim outcome: 8% denied, 4% pended, 88% paid. A random pharmacy denial is refill-too-soon; prior-auth pharmacy denials are set further below.
-            v = r.u(); outcome = "DENIED" if v < .08 else "PENDED" if v < .12 else "PAID"; sub = None; scen = "BASE"
+            # Random claim outcome: denial_rate denied (default 8%), pend_rate pended (default 4%), the rest paid. A random pharmacy denial is refill-too-soon; prior-auth pharmacy denials are set further below.
+            dr, pr_ = ctx.dist.get("denial_rate", .08), ctx.dist.get("pend_rate", .04)      # blueprint denial / pend rates (defaults 8% / 4%)
+            v = r.u(); outcome = "DENIED" if v < dr else "PENDED" if v < dr + pr_ else "PAID"; sub = None; scen = "BASE"
             if outcome == "DENIED":
                 sub = "DUPLICATE" if ctype == "RX" else r.weighted([x for x in DENIAL_W if not (x[0] == "MISSING_INFO" and ctype != "PRO")])
             elif outcome == "PENDED":

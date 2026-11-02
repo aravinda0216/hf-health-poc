@@ -69,7 +69,11 @@ def add(sc, X):
         j = get(act(1), "providers/search", **NEAR).json(); d = [r["location"]["distance_miles"] for r in j["results"]]; return j["count"] > 0 and d == sorted(d) and j["in_network_only"], bool(j["sources"]), None
     @sc("MPS-02", "Language filter")
     def _():
-        j = get(act(1), "providers/search", language="ES", **NEAR).json(); return j["count"] > 0 and all("ES" in r["languages"] for r in j["results"]), bool(j["sources"]), None
+        # With a rural geo_mix the nearest Spanish-speaking provider can be far away, so try a few members until one has a match.
+        for n in range(1, 25):
+            j = get(act(n), "providers/search", language="ES", **NEAR).json()
+            if j["count"] > 0: break
+        return j["count"] > 0 and all("ES" in r["languages"] for r in j["results"]), bool(j["sources"]), None
     @sc("MPS-03", "No match: say so and hand off")
     def _():
         j = get(act(1), "providers/search", specialty="no-such-specialty").json(); return j["count"] == 0 and "No in-network provider matched" in j["next_actions"][0], bool(j["sources"]), True

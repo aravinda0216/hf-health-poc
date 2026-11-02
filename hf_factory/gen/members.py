@@ -12,6 +12,7 @@ SCOPES = ["BENEFITS","CLAIMS","BILLING","PA_STATUS","APPOINTMENTS","PCP_CHANGE"]
 class Members:
     def __init__(self, ctx, vol):
         self.ctx, self.vol, self.cache = ctx, vol, {}
+        self.plan_lob = ref.plan_lobs(ctx.lob_mix)          # LOB of each plan slot
         self.P = ref.providers(ctx, vol["providers"])
         # PCP pools are built for both the base and the evolved provider count, so existing members keep their original PCP when 'evolve' adds providers.
         self.pool = {n: [ref.pools(self.P, n, pi)["pcp"] for pi in range(4)] for n in {vol["base_providers"], vol["providers"]}}
@@ -26,20 +27,26 @@ class Members:
         fixed = {0: "PEV-01", 1: "PEV-02", 2: "PEV-03"}
         scen = fixed.get(i)
         if scen is None: scen = r.pick(["PEV-02", "PEV-03"]) if r.u() < ctx.edge / 100 else "BASE"
-        # About 12% are under 65 (disability-eligible Medicare); the rest are 65-90 with a skew towards younger seniors.
-        under65 = r.chance(.12)
-        age = r.i(22, 64) if under65 else min(90, 65 + int(r.u() ** 1.5 * 26))
+        # Plan (and therefore line of business) is drawn from its own stream so the later draws do not depend on how many LOBs exist.
+        plan_idx = ctx.rng("s4", "plan_pick", i).i(0, 3); lob = self.plan_lob[plan_idx]
+        # Age by LOB. Medicare Advantage: ~12% under 65 (disability-eligible), the rest 65-90 skewed younger. Medicaid: ~38% children, adults to 64. Commercial: working-age 0-64.
+        if lob == "MEDICARE_ADV":
+            under65 = r.chance(.12); age = r.i(22, 64) if under65 else min(90, 65 + int(r.u() ** 1.5 * 26))
+        elif lob == "MEDICAID_MCO":
+            age = r.i(0, 17) if r.chance(.38) else r.i(18, 64)
+        else:
+            age = r.i(0, 17) if r.chance(.18) else min(64, 18 + int(r.u() ** 0.9 * 47))
         dob = date(ctx.as_of.year - age, r.i(1, 12), r.i(1, 28))
         sex = "F" if r.chance(.56) else "M"
-        plan_idx = r.i(0, 3)
-        city = r.pick(R.CITIES)
-        u = r.u(); lang = "EN" if u < .85 else "ES" if u < .95 else "OTHER"
+        city = R.pick_city(r, ctx.dist.get("geo_mix"))
+        # Language by the blueprint's language_mix (default 85% EN, 10% ES, 5% other).
+        lm = ctx.dist.get("language_mix") or {"EN": .85, "ES": .10, "OTHER": .05}; lang = r.weighted(sorted(lm.items()))
         # Members that existed in the base dataset keep the base provider pool, members added by 'evolve' use the larger pool: this keeps the prefix stable.
         np_ = vol["base_providers"] if i < vol["base_members"] else vol["providers"]
         pool = self.pool[np_][plan_idx]
-        a = dict(i=i, scen=scen, age=age, dob=dob.isoformat(), sex=sex, plan_idx=plan_idx, city=city, lang=lang, r=r,
+        a = dict(i=i, scen=scen, age=age, dob=dob.isoformat(), sex=sex, plan_idx=plan_idx, lob=lob, city=city, lang=lang, r=r,
                  pcp_k=pool[int(r.u() * len(pool))], tier=r.weighted([("LOW", 70), ("RISING", 22), ("HIGH", 8)]),
-                 prior=r.chance(.15), caregiver=r.chance(.10),
+                 prior=r.chance(.15), caregiver=r.chance(ctx.dist.get("caregiver_rate", .10)),
                  status=("TERMED" if scen == "PEV-02" else "PENDING" if scen == "PEV-03" else r.weighted([("ACTIVE", 97), ("GRACE_PERIOD", 3)])),
                  first=r.pick(R.FIRST_F if sex == "F" else R.FIRST_M), last=r.pick(R.LAST))
         self.cache[i] = a
@@ -50,9 +57,9 @@ class Members:
         ctx, vol = self.ctx, self.vol
         for i in range(vol["members"]):
             a = self.attrs(i); r = a["r"]; mid = ctx.id("member_demographics", i); sc = a["scen"]; c = a["city"]
-            sink.emit("member_demographics", i, sc, member_id=mid, persona_type="MEDICARE", first_name=a["first"], last_name=a["last"], dob=a["dob"], sex_at_birth=a["sex"],
+            sink.emit("member_demographics", i, sc, member_id=mid, persona_type=ref.PERSONA_OF_LOB[a["lob"]], first_name=a["first"], last_name=a["last"], dob=a["dob"], sex_at_birth=a["sex"],
                 address=f"{r.i(100, 9899)} {r.pick(R.STREETS)}", city=c[0], state=c[1], zip=f"{c[2]}{r.i(0, 99):02d}", lat=round(c[3] + r.u() / 10, 4), lon=round(c[4] + r.u() / 10, 4),
-                preferred_language=a["lang"], accessibility_needs=([r.pick(["HEARING","LARGE_PRINT","INTERPRETER","TTY_RELAY"])] if r.chance(.25) else []),
+                preferred_language=a["lang"], geo_type=R.GEO_OF.get(c[0]), accessibility_needs=([r.pick(["HEARING","LARGE_PRINT","INTERPRETER","TTY_RELAY"])] if r.chance(.25) else []),
                 preferred_channel=r.weighted([("VOICE", 65), ("CHAT", 25), ("SMS", 10)]), phone=f"555-01{r.i(0, 99):02d}",
                 # Reserved synthetic formats: phone 555-01xx and @example.test (rule P-02). The member index in the address keeps emails unique.
                 email=f"{a['first'].lower()}.{a['last'].lower()}{i}@example.test", verification_factors={"dob": a["dob"], "last4_synthetic": f"{r.i(0, 9999):04d}"})

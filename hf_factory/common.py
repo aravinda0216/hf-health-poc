@@ -60,6 +60,8 @@ class Ctx:
         self.as_of = date.fromisoformat(as_of) if isinstance(as_of, str) else as_of
         self.now = datetime(self.as_of.year, self.as_of.month, self.as_of.day, 12, 0, 0)
         self.vol = vol
+        # Set by the data engine from the blueprint: line-of-business mix and optional distributions (language_mix, geo_mix, denial_rate, pend_rate, caregiver_rate).
+        self.lob_mix = {"MEDICARE_ADV": 1}; self.dist = {}
         self._ns = uuid.uuid5(uuid.NAMESPACE_URL, "hfactory:" + dataset_id)
 
     # Stable id: same (dataset, entity, seed, index, sub) always gives the same UUID, on any machine.

@@ -88,6 +88,14 @@ FIRST_F = ["Mary","Patricia","Jennifer","Linda","Elizabeth","Barbara","Susan","J
 LAST = ["Smith","Johnson","Williams","Brown","Jones","Garcia","Miller","Davis","Rodriguez","Martinez","Hernandez","Lopez","Gonzalez","Wilson","Anderson","Thomas","Taylor","Moore","Jackson","Martin","Lee","Perez","Thompson","White","Harris","Sanchez","Clark","Ramirez","Lewis","Robinson","Walker","Young","Allen","King","Wright","Scott","Torres","Nguyen","Hill","Flores"]
 CITIES = [("Dallas","TX","752",32.78,-96.80),("Houston","TX","770",29.76,-95.37),("Miami","FL","331",25.76,-80.19),("Columbus","OH","432",39.96,-83.00),
           ("Philadelphia","PA","191",39.95,-75.17),("Atlanta","GA","303",33.75,-84.39),("Phoenix","AZ","850",33.45,-112.07),("Denver","CO","802",39.74,-104.99)]
+# Rural towns (used only when a blueprint sets a geo_mix). CITIES stays the eight metro areas so default datasets are unchanged.
+CITIES_RURAL = [("Marfa","TX","797",30.31,-104.02),("Alpine","TX","798",30.36,-103.66),("Pecos","TX","797",31.42,-103.49),("Cambridge","OH","437",40.03,-81.59),("Gallup","NM","873",35.53,-108.74),("Hazard","KY","417",37.25,-83.19)]
+GEO_CLASSES = {"URBAN": CITIES[:5], "SUBURBAN": CITIES[5:], "RURAL": CITIES_RURAL}
+GEO_OF = {c[0]: g for g, cs in GEO_CLASSES.items() for c in cs}
+def pick_city(r, geo_mix=None):
+    """City for a member or location. With a geo_mix ({"RURAL":.4,...}) choose the class first, otherwise pick uniformly from the metro list (default behaviour)."""
+    if not geo_mix: return r.pick(CITIES)
+    g = r.weighted(sorted(geo_mix.items())); return r.pick(GEO_CLASSES[g])
 STREETS = ["Main St","Oak Ave","Maple Dr","Cedar Ln","Elm St","Park Blvd","Lake Rd","Hill St"]
 ORG_WORDS = {"HOSPITAL":["Regional Medical Center","Memorial Hospital","General Hospital"],"SNF":["Care Center","Rehabilitation and Nursing","Skilled Nursing"],
  "HOME_HEALTH":["Home Health Services","Visiting Nurses"],"URGENT_CARE":["Urgent Care"],"LAB":["Diagnostic Laboratory"],"IMAGING":["Imaging Center"],"PHARMACY":["Pharmacy"]}

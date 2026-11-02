@@ -12,6 +12,7 @@ class Volumes(BaseModel):
     model_config = ConfigDict(extra="forbid")
     members: int = Field(..., ge=1); providers: int = Field(..., ge=1); claims: int = Field(..., ge=0); auths: int = Field(..., ge=0)
     history_months: int = Field(..., ge=1, le=60)
+    claims_per_member_year: Optional[Num] = Field(None, gt=0, le=100)
     base_members: int = Field(..., ge=1); base_providers: int = Field(..., ge=1); base_claims: int = Field(..., ge=0); base_auths: int = Field(..., ge=0)
 
 class DataJob(BaseModel):
@@ -24,6 +25,7 @@ class DataJob(BaseModel):
     dataset_id: str = Field(..., pattern=r"^[A-Za-z0-9_\-]{3,64}$")
     use_cases: List[str] = Field(..., min_length=1)
     lob_mix: Dict[str, Num] = Field(..., min_length=1)
+    distributions: Dict[str, Union[Num, Dict[str, Num]]] = Field(default_factory=dict, description="Optional language_mix, geo_mix, denial_rate, pend_rate, caregiver_rate")
     volumes: Volumes
     edge_case_pct: Num = Field(..., ge=0, le=100)
     blueprint_hash: str; data_spec_hash: str

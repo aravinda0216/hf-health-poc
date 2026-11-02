@@ -14,7 +14,7 @@ def _t(domain, pk, cols):
 # One entry per entity. 'M' = member, 'P' = provider/plan reference, 'C' = claims, 'A' = authorization, 'K' = knowledge/care (domain tag only).
 TABLES = {
 # ---- Member (primary) ----
-"member_demographics": _t("M","member_id","member_id:T persona_type:T first_name:T last_name:T dob:T sex_at_birth:T address:T city:T state:T zip:T lat:R lon:R preferred_language:T accessibility_needs:J preferred_channel:T phone:T email:T verification_factors:J"),
+"member_demographics": _t("M","member_id","member_id:T persona_type:T first_name:T last_name:T dob:T sex_at_birth:T address:T city:T state:T zip:T lat:R lon:R preferred_language:T geo_type:T accessibility_needs:J preferred_channel:T phone:T email:T verification_factors:J"),
 "family_relationship": _t("M","relationship_id","relationship_id:T member_id:T related_member_id:T subscriber_id:T relationship_code:T caregiver_flag:B caregiver_name:T caregiver_relationship:T authorization_scope:J consent_effective_dt:T consent_expiry_dt:T verified:B"),
 "plan": _t("M","plan_id","plan_id:T plan_name:T lob:T plan_year:I network_type:T deductible:R oop_max:R copay_pcp:R copay_specialist:R coinsurance_pct:R allowances:J pa_required_codes:J formulary_id:T"),
 "plan_enrollment": _t("M","enrollment_id","enrollment_id:T member_id:T plan_id:T effective_dt:T term_dt:T status:T premium_status:T cob_flag:B other_payer_id:T retro_change_flag:B"),
@@ -26,7 +26,7 @@ TABLES = {
 # ---- Provider (supporting) ----
 "provider": _t("P","npi","npi:T provider_type:T entity_type:T first_name:T last_name:T org_name:T taxonomy_code:T specialty:T facility_type:T languages:J gender:T tin:T status:T"),
 "network_participation": _t("P","participation_id","participation_id:T npi:T plan_id:T status:T tier:T effective_dt:T term_dt:T panel_status:T onboarding_stage:T pending_items:J onboarding_started_dt:T expected_live_dt:T"),
-"practice_location": _t("P","location_id","location_id:T npi:T address:T city:T state:T zip:T lat:R lon:R phone:T accepting_new_patients:B accessibility:J telehealth:B last_verified_dt:T availability_loaded:B added_dt:T"),
+"practice_location": _t("P","location_id","location_id:T npi:T address:T city:T state:T zip:T lat:R lon:R phone:T accepting_new_patients:B accessibility:J telehealth:B last_verified_dt:T availability_loaded:B added_dt:T geo_type:T"),
 "appointment_slot": _t("P","slot_id","slot_id:T npi:T location_id:T slot_start:T duration_min:I visit_type:T status:T"),
 # ---- Claims (primary) ----
 "claim_header": _t("C","claim_id","claim_id:T claim_type:T member_id:T plan_id:T billing_npi:T rendering_npi:T facility_npi:T claim_frequency_code:T original_claim_id:T service_from_dt:T service_to_dt:T received_dt:T adjudicated_dt:T paid_dt:T status:T network_status:T is_emergency:B auth_id:T bill_type:T drg_code:T total_billed:R total_allowed:R total_paid:R member_resp:R"),

@@ -1,0 +1,102 @@
+{
+ "blueprint_id": "bp_com_scale_03_v1",
+ "schema_version": "2.0",
+ "blueprint_version": "1.0.0",
+ "derived_from": "s1_provider_demo",
+ "note": "S3: Commercial scale test, 150k members, ~1M claims, 30% denials, 30% edge cases.",
+ "repeatability": {
+  "root_seed": 20261103,
+  "as_of_date": "2026-10-12",
+  "catalog_version": "2.4.0",
+  "rule_set_version": "1.8.0",
+  "generator_version": "0.2.0",
+  "id_strategy": "UUIDv5(dataset_id, entity, seed, row_index)",
+  "llm": {
+   "mode": "templated",
+   "note": "v1 uses templated text; LLM + content-addressed cache is a later step"
+  }
+ },
+ "tenant": {
+  "id": "com-scale-03",
+  "env": "demo",
+  "ttl_hours": 336
+ },
+ "scope": {
+  "use_cases": [
+   "PCS",
+   "PAS",
+   "PEV",
+   "PAP",
+   "PPI",
+   "PON"
+  ],
+  "personas": [
+   "BILLING",
+   "REFERRAL",
+   "OFFICE"
+  ],
+  "channels": [
+   "voice",
+   "chat"
+  ],
+  "domains": {
+   "primary": [
+    "C",
+    "A",
+    "M",
+    "K"
+   ],
+   "supporting": [
+    "P",
+    "CM"
+   ]
+  }
+ },
+ "data_spec": {
+  "dataset_id": "com-scale-03",
+  "volumes": {
+   "members": 150000,
+   "history_months": 12,
+   "claims_per_member_year": 6.667
+  },
+  "distributions": {
+   "lob_mix": {
+    "COMMERCIAL": 1
+   },
+   "denial_rate": 0.3,
+   "pend_rate": 0.05
+  },
+  "edge_case_pct": 30,
+  "rule_sets": [
+   "R",
+   "T",
+   "F",
+   "C",
+   "P",
+   "A"
+  ]
+ },
+ "infra_spec": {
+  "cloud": "GCP",
+  "region": "us-central1",
+  "tier": "small",
+  "note": "POC runs on local SQLite; GCP mapping is a later step"
+ },
+ "api_spec": {
+  "style": "REST, OpenAPI 3.1",
+  "base_path": "/v1",
+  "auth": "OAuth2 client credentials",
+  "fault_injection": {
+   "error_rate_pct": 1,
+   "latency_p95_ms": 450
+  },
+  "agent_tools": true,
+  "rate_limit_rpm": 600
+ },
+ "quality_gates": [
+  "Rule pass 100% (R/T/F/C/P/A)",
+  "Privacy scan PASS",
+  "API contract tests PASS",
+  "Agent smoke test PASS"
+ ]
+}

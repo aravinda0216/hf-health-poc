@@ -2,9 +2,12 @@
 import copy, json
 from .common import sha, canon, GEN_VERSION, CATALOG_VERSION, RULESET_VERSION
 
+# Optional distribution keys that shape the data. They are part of the data_spec_hash only when present.
+DIST_KEYS = ("language_mix", "geo_mix", "denial_rate", "pend_rate", "caregiver_rate")
+
 # Volumes follow simple ratios: ~6 claims per member per year, ~1 provider per 100 members, ~5% of claims have an auth.
-def derive_volumes(members, months, base=None):
-    claims = round(members * 6 * months / 12)
+def derive_volumes(members, months, base=None, cpm=6.0):
+    claims = round(members * cpm * months / 12)
     v = dict(members=members, providers=max(60, round(members / 100 * 1.08)), claims=claims, auths=max(60, round(claims * 0.05)))
     # base_* = size at blueprint creation; rows below the base are prefix-stable under 'evolve' (members +20% etc.)
     b = base or v
@@ -22,8 +25,9 @@ def patch(bp, members=None, seed=None, evolve_from=None):
     n = members or ds["volumes"]["members"]
     base = None
     if evolve_from:  # evolve: keep the original size as the prefix-stable base
-        base = derive_volumes(evolve_from, months)
-    ds["volumes"] = {**derive_volumes(n, months, base), "history_months": months}
+        base = derive_volumes(evolve_from, months, None, ds["volumes"].get("claims_per_member_year", 6.0))
+    cpm = ds["volumes"].get("claims_per_member_year", 6.0)      # a blueprint can state a different claim rate (for example a 1M-claim load test)
+    ds["volumes"] = {**derive_volumes(n, months, base, cpm), "history_months": months, **({"claims_per_member_year": cpm} if "claims_per_member_year" in ds["volumes"] else {})}
     if seed is not None: bp["repeatability"]["root_seed"] = int(seed)
     bp["blueprint_version"] = bp.get("blueprint_version", "1.0.0")
     finalize(bp)
@@ -34,7 +38,8 @@ def data_core(bp):
     r, ds = bp["repeatability"], bp["data_spec"]
     return {"dataset_id": ds["dataset_id"], "root_seed": r["root_seed"], "as_of_date": r["as_of_date"], "catalog_version": r["catalog_version"],
             "rule_set_version": r["rule_set_version"], "generator_version": r["generator_version"], "use_cases": bp["scope"]["use_cases"],
-            "volumes": ds["volumes"], "edge": ds["edge_case_pct"], "lob": ds["distributions"]["lob_mix"]}
+            "volumes": ds["volumes"], "edge": ds["edge_case_pct"], "lob": ds["distributions"]["lob_mix"],
+            **{k: ds["distributions"][k] for k in DIST_KEYS if k in ds["distributions"]}}
 
 # Recompute both hashes after any patch so they always match the content (data_spec_hash first, then the whole-blueprint hash).
 def finalize(bp):
@@ -56,6 +61,7 @@ def job_spec(bp, stage, entities, extra=None, run_id=None):
             "root_seed": r["root_seed"], "stage_seed": stage_seed(r["root_seed"], stage["id"]),
             "as_of_date": r["as_of_date"], "catalog_version": r["catalog_version"], "rule_set_version": r["rule_set_version"], "generator_version": r["generator_version"],
             "id_strategy": r["id_strategy"], "dataset_id": ds["dataset_id"], "use_cases": bp["scope"]["use_cases"], "lob_mix": ds["distributions"]["lob_mix"],
+            "distributions": {k: ds["distributions"][k] for k in DIST_KEYS if k in ds["distributions"]},
             "blueprint_hash": bp["blueprint_hash"], "data_spec_hash": ds["data_spec_hash"], "entities": entities,
             "volumes": ds["volumes"], "edge_case_pct": ds["edge_case_pct"], "rules": stage.get("rules", []), **(extra or {})}
 
@@ -72,7 +78,7 @@ def from_job(j):
     bp = {"blueprint_id": "bp-" + j["run_id"], "scope": {"use_cases": j["use_cases"]},
           "repeatability": {"root_seed": j["root_seed"], "as_of_date": j["as_of_date"], "catalog_version": j["catalog_version"], "rule_set_version": j["rule_set_version"],
                             "generator_version": j["generator_version"], "id_strategy": j["id_strategy"]},
-          "data_spec": {"dataset_id": j["dataset_id"], "volumes": j["volumes"], "edge_case_pct": j["edge_case_pct"], "distributions": {"lob_mix": j["lob_mix"]}}}
+          "data_spec": {"dataset_id": j["dataset_id"], "volumes": j["volumes"], "edge_case_pct": j["edge_case_pct"], "distributions": {"lob_mix": j["lob_mix"], **(j.get("distributions") or {})}}}
     finalize(bp)
     return bp
 

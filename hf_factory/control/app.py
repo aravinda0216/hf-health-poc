@@ -47,7 +47,7 @@ def create_control_app(runs_dir, token=None, max_members=None, public_base=None)
         if not store.exists(run_id): raise CtlError(404, "RUN_NOT_FOUND", f"No run {run_id}")
         return store.load(run_id)
 
-    def phash(model): return hashlib.sha256(canon(json.loads(model.model_dump_json())).encode()).hexdigest()
+    def phash(model): return hashlib.sha256(canon(json.loads(model.model_dump_json(exclude_none=True))).encode()).hexdigest()
 
     def entities_result(con, stage):
         cs = rules.checksums(con, tables=set(STAGE_TABLES[stage]))
@@ -82,7 +82,7 @@ def create_control_app(runs_dir, token=None, max_members=None, public_base=None)
             if getattr(j, k) != v: raise CtlError(422, "VERSION_MISMATCH", f"{k} {getattr(j, k)} is not supported by this engine ({v})")
         if j.id_strategy != "UUIDv5(dataset_id, entity, seed, row_index)": raise CtlError(422, "ID_STRATEGY_UNSUPPORTED", "Only the UUIDv5 id strategy is supported")
         if j.volumes.members > max_members: raise CtlError(413, "ROW_LIMIT", f"members {j.volumes.members} exceeds this engine's limit {max_members}", {"limit": max_members})
-        bp = blueprint.from_job(json.loads(j.model_dump_json()))
+        bp = blueprint.from_job(json.loads(j.model_dump_json(exclude_none=True)))
         if bp["data_spec"]["data_spec_hash"] != j.data_spec_hash:
             raise CtlError(422, "DATA_SPEC_MISMATCH", "data_spec_hash does not match the data-defining fields of the payload", {"computed": bp["data_spec"]["data_spec_hash"]})
 
@@ -103,7 +103,7 @@ def create_control_app(runs_dir, token=None, max_members=None, public_base=None)
                 else:
                     run = dict(run_id=rid, dataset_id=j.dataset_id, state="RUNNING", created_at=now(), updated_at=now(), root_seed=j.root_seed, as_of_date=str(j.as_of_date),
                                data_spec_hash=j.data_spec_hash, blueprint_hash=j.blueprint_hash, volumes=j.volumes.model_dump(), use_cases=j.use_cases,
-                               job_s3=json.loads(j.model_dump_json()), stages={}, api=None)
+                               job_s3=json.loads(j.model_dump_json(exclude_none=True)), stages={}, api=None)
             else:
                 run = run_or_404(rid)
                 if run["data_spec_hash"] != j.data_spec_hash or run["root_seed"] != j.root_seed: raise CtlError(409, "RUN_CONFLICT", "payload does not belong to this run (data_spec_hash/root_seed differ)")

@@ -5,15 +5,31 @@ from datetime import date, timedelta
 from .. import refdata as R
 from ..common import make_npi, make_tin
 
-# Four Medicare Advantage plans (HMO/PPO). Cost sharing grows with the plan number; all have a $0 deductible (README deviation 3).
-PLAN_CFG = [  # name, network, oop_max, copay_pcp, copay_spec
- ("MA HMO Choice 1","HMO",4500,0,30),("MA PPO Select 2","PPO",5900,5,35),("MA HMO Plus 3","HMO",7550,10,40),("MA PPO Premier 4","PPO",8850,15,45)]
+# Four plans per dataset. Each plan's line of business follows the blueprint's lob_mix (largest-remainder split of four slots); plan cost sharing follows the LOB.
+# name, network, oop_max, copay_pcp, copay_spec, coinsurance. All plans have a $0 deductible: the claims generator does not model deductibles (README deviation 3).
+PLAN_CFG_BY_LOB = {
+ "MEDICARE_ADV": [("MA HMO Choice 1","HMO",4500,0,30,.20),("MA PPO Select 2","PPO",5900,5,35,.20),("MA HMO Plus 3","HMO",7550,10,40,.20),("MA PPO Premier 4","PPO",8850,15,45,.20)],
+ "MEDICAID_MCO": [("Medicaid Care HMO 1","HMO",250,0,0,0.0),("Medicaid Care HMO 2","HMO",250,0,4,0.0),("Medicaid Family PPO 3","PPO",400,0,4,0.0),("Medicaid Rural Access 4","PPO",400,3,4,0.0)],
+ "COMMERCIAL": [("Commercial HMO Bronze","HMO",9000,40,70,.40),("Commercial PPO Silver","PPO",7500,30,60,.30),("Commercial HMO Gold","HMO",5500,20,45,.20),("Commercial PPO Platinum","PPO",3500,10,30,.10)]}
+PLAN_CFG = PLAN_CFG_BY_LOB["MEDICARE_ADV"]       # kept for readers of the old name
+PERSONA_OF_LOB = {"MEDICARE_ADV": "MEDICARE", "MEDICAID_MCO": "MEDICAID", "COMMERCIAL": "COMMERCIAL"}
+
+def plan_lobs(lob_mix):
+    """LOB of each of the four plan slots: largest-remainder allocation of the mix (ties by name), then slots filled in name order."""
+    items = sorted(lob_mix.items()); tot = float(sum(w for _, w in items)); quota = [(w / tot * 4, k) for k, w in items]
+    n = {k: int(q) for q, k in quota}
+    for q, k in sorted(quota, key=lambda x: (-(x[0] - int(x[0])), x[1])):
+        if sum(n.values()) < 4: n[k] += 1
+    out = []
+    for k, _ in items: out += [k] * n[k]
+    return out
 
 def plan_rows(ctx):
-    out = []
-    for k, (nm, net, oop, cp, cs) in enumerate(PLAN_CFG):
-        out.append(dict(plan_id=ctx.id("plan", k), plan_name=nm, lob="MEDICARE_ADV", plan_year=2026, network_type=net, deductible=0.0, oop_max=float(oop),
-            copay_pcp=float(cp), copay_specialist=float(cs), coinsurance_pct=0.20, allowances={"OTC_quarterly": 50 + 25 * k, "dental_annual": 1000 + 250 * k, "transport_trips": 12 * (k % 2)},
+    out = []; seen = {}
+    for k, lob in enumerate(plan_lobs(ctx.lob_mix)):
+        j = seen.get(lob, 0); seen[lob] = j + 1; nm, net, oop, cp, cs, co = PLAN_CFG_BY_LOB[lob][j % 4]
+        out.append(dict(plan_id=ctx.id("plan", k), plan_name=nm, lob=lob, plan_year=2026, network_type=net, deductible=0.0, oop_max=float(oop),
+            copay_pcp=float(cp), copay_specialist=float(cs), coinsurance_pct=co, allowances={"OTC_quarterly": 50 + 25 * k, "dental_annual": 1000 + 250 * k, "transport_trips": 12 * (k % 2) if lob != "MEDICAID_MCO" else 24},
             pa_required_codes=R.PA_CODES, formulary_id=f"FORM-2026-{k+1}", _idx=k))
     return out
 
@@ -41,11 +57,11 @@ def provider_attrs(ctx, k):
         kind = "PCP" if u < .35 else "SPECIALIST" if u < .75 else r.weighted([("HOSPITAL",20),("SNF",20),("HOME_HEALTH",10),("URGENT_CARE",10),("LAB",10),("IMAGING",15),("PHARMACY",15)])
     ptype = kind if kind in ("PCP", "SPECIALIST") else "FACILITY"
     ind = ptype != "FACILITY"
-    city = r.pick(R.CITIES); last = r.pick(R.LAST); gender = r.pick(["M","F","M","F","X"][:4]) if ind else None
+    city = R.pick_city(r, ctx.dist.get("geo_mix")); last = r.pick(R.LAST); gender = r.pick(["M","F","M","F","X"][:4]) if ind else None
     tax = r.pick(R.TAXONOMY[kind])
     # Three consecutive providers share a TIN, which mimics group practices.
     p = dict(k=k, npi=make_npi(k), provider_type=ptype, kind=kind, entity_type="INDIVIDUAL" if ind else "ORG", tin=make_tin(k // 3), taxonomy_code=tax[0], specialty=tax[1],
-             facility_type=None if ind else kind, languages=["EN"] + (["ES"] if r.chance(.25) else []), gender=gender, city=city, last=last)
+             facility_type=None if ind else kind, languages=["EN"] + (["ES"] if r.chance(0.25 + 0.5 * (ctx.dist.get("language_mix") or {}).get("ES", 0)) else []), gender=gender, city=city, last=last)
     if ind:
         p["first_name"] = r.pick(R.FIRST_F if gender == "F" else R.FIRST_M); p["last_name"] = last; p["org_name"] = None
         p["first_name"] = ("Dr. " + p["first_name"])
@@ -131,13 +147,13 @@ def generate(ctx, sink, vol):
         r = ctx.rng("s3", "location", k)
         # Locations: 1-2 per provider. Provider 16 (PON-03) always gets two; the second is new (added 3 days ago) with no availability loaded.
         for li in range(2 if k == 16 else 1 + (1 if r.chance(.4) else 0)):
-            c = r.pick(R.CITIES)
+            c = R.pick_city(r, ctx.dist.get("geo_mix"))
             # 8% of locations have a last-verified date older than 90 days, so directory-freshness questions have data to find.
             stale = r.chance(.08)
             sink.emit("practice_location", k, PON_SCN.get(k, "BASE"), location_id=ctx.id("practice_location", k, li), npi=p["npi"], address=f"{r.i(100,9899)} {r.pick(R.STREETS)}", city=c[0], state=c[1],
                       zip=f"{c[2]}{r.i(0,99):02d}", lat=round(c[3] + r.u() / 10, 4), lon=round(c[4] + r.u() / 10, 4), phone=f"555-01{r.i(0,99):02d}",
                       accepting_new_patients=r.chance(.7), accessibility=r.pick([["WHEELCHAIR"],["WHEELCHAIR","ASL"],[],["TTY"]]), telehealth=r.chance(.5),
-                      last_verified_dt=ctx.d(-(r.i(91, 400) if stale else r.i(1, 89))), availability_loaded=not (k == 16 and li == 1), added_dt=(ctx.d(-3) if (k == 16 and li == 1) else None))
+                      last_verified_dt=ctx.d(-(r.i(91, 400) if stale else r.i(1, 89))), geo_type=R.GEO_OF.get(c[0]), availability_loaded=not (k == 16 and li == 1), added_dt=(ctx.d(-3) if (k == 16 and li == 1) else None))
             # MAS: open appointment slots for the next 14 days at this location (PCP / specialist, active, availability loaded). Every 13th provider (k % 13 == 5) has none: guaranteed "no availability" case.
             if p["kind"] in ("PCP", "SPECIALIST") and p["status"] == "ACTIVE" and k % 13 != 5 and not (k == 16 and li == 1):
                 slots(ctx, sink, k, li, ctx.id("practice_location", k, li), p["npi"])
