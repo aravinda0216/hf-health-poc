@@ -34,7 +34,7 @@ class Sampler:
                 row[f.name] = value(self.spec, self.ctx, e, f2, r, 10_000_000 + self.k, row, keys)
             body = {f.name: row[f.name] for f in e.fields if not f.primary_key and not f.server_set and row[f.name] is not None}
             if ep.verify_member: body.update(self.member_factors(body[ep.verify_member]))
-            if self.c.post("/v1" + ep.path, json=body, params={"dry_run": "true"}, headers=self.H).status_code == ok_status: return body
+            if self.c is None or self.c.post("/v1" + ep.path, json=body, params={"dry_run": "true"}, headers=self.H).status_code == ok_status: return body      # no client: first candidate (used to write Postman bodies)
         return None
 
     def endpoint(self, ep, op):

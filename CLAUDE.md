@@ -143,7 +143,13 @@ Derived tables (accumulators, care-gap closure, TOC/care cases, OOP-cap pass) ar
 4. Add conversation seeds (transcript JSONL) from scenario rows and an LLM-driven agent eval on top of `smoke.py`.
 
 ## Postman
-`postman/hf-provider-api.postman_collection.json` (42 requests, 155 assertions, provider API) and `postman/hf-member-api.postman_collection.json` (21 requests, 34 assertions, member API; `python3 postman/generate_member.py out/s2/factory.db`), with `postman/hf-local.postman_environment.json`.
-Run `make demo`, then `make serve`, import both files into Postman and run the collection folders in order; a token is fetched automatically.
-`postman/generate.py` rebuilds the files from the dataset (`python3 postman/generate.py out/dev/factory.db`). Some requests change state (file an appeal, submit a
-document, open a ticket, set availability), so restart `make serve` before re-running. CLI: `newman run postman/hf-provider-api.postman_collection.json -e postman/hf-local.postman_environment.json`.
+Three collections in `postman/` (import with `hf-local.postman_environment.json`; a token is fetched automatically):
+
+| Collection | Covers | Regenerate | Serve with |
+|---|---|---|---|
+| `hf-provider-api` (42 requests, 155 assertions) | provider API, built-in | `python3 postman/generate.py out/dev/factory.db` | `HF_DB=out/dev/factory.db` |
+| `hf-member-api` (21 requests, 34 assertions) | member API, built-in | `python3 postman/generate_member.py out/s2/factory.db` | `HF_DB=out/s2/factory.db` |
+| `hf-custom-api` (17 requests, 39 assertions) | endpoints defined in the blueprint (`custom_endpoints`) | `python3 postman/generate_custom.py blueprints/s5_custom_appointments.json out/s5/factory.db` | `HF_DB=out/s5/factory.db HF_CUSTOM_SPEC=out/s5/custom-spec.json` |
+
+The custom collection is generated from the blueprint's entity and endpoint definitions, so it works for any blueprint (create with dry run, idempotent repeat, 422, 403 fail-closed, 409 conflict, get, list, status transitions).
+Some requests change state, so start the API with a fresh `HF_STATE_DB` before each run. CLI: `newman run postman/<collection>.json -e postman/hf-local.postman_environment.json`.

@@ -1,0 +1,848 @@
+{
+  "info": {
+    "name": "Healthcare AI Factory: Blueprint-defined API (s5_custom_appointments.json)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Generated from the blueprint's custom_entities and custom_endpoints. Start the API with HF_DB=<db> HF_CUSTOM_SPEC=<out>/custom-spec.json and a fresh HF_STATE_DB, then run the folders top to bottom: records created in the run are chained through collection variables."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('access_token') && !pm.request.url.getPath().endsWith('/oauth/token')) {",
+          " pm.sendRequest({ url: pm.variables.replaceIn('{{base_url}}/v1/oauth/token'), method: 'POST', header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "  body: { mode: 'urlencoded', urlencoded: [{ key: 'grant_type', value: 'client_credentials' }, { key: 'client_id', value: pm.variables.replaceIn('{{client_id}}') }, { key: 'client_secret', value: pm.variables.replaceIn('{{client_secret}}') }] } },",
+          "  function (e, r) { if (!e && r.code === 200) pm.collectionVariables.set('access_token', r.json().access_token); }); }"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "client_id",
+      "value": "hf-demo-client"
+    },
+    {
+      "key": "client_secret",
+      "value": "demo-secret-change-me"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "appointment_row_id",
+      "value": "2107031d-e7a5-581b-802c-9ba6adb8a836"
+    },
+    {
+      "key": "appointment_member_id",
+      "value": "b6e4c2a5-e551-5e0f-b465-ebef2912abc5"
+    },
+    {
+      "key": "appointment_dob",
+      "value": "1962-11-20"
+    },
+    {
+      "key": "appointment_last_name",
+      "value": "Rodriguez"
+    },
+    {
+      "key": "appointment_member2_id",
+      "value": "9a6aaec5-9df8-5941-9ee3-ad4fd7274874"
+    },
+    {
+      "key": "appointment_dob2",
+      "value": "1988-11-18"
+    },
+    {
+      "key": "appointment_last_name2",
+      "value": "Lewis"
+    },
+    {
+      "key": "referral_row_id",
+      "value": "REF-0000000"
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Auth",
+      "item": [
+        {
+          "name": "Create access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/oauth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "oauth",
+                "token"
+              ],
+              "query": []
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"bearer token\", function () { pm.expect(typeof j.access_token === 'string').to.be.ok; });",
+                  "pm.collectionVariables.set('access_token', j.access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Appointment",
+      "item": [
+        {
+          "name": "Create Appointment: dry run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments?dry_run=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "dry_run",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{appointment_member_id}}\",\n  \"provider_id\": \"9016225986\",\n  \"appointment_date\": \"2029-10-17\",\n  \"start_time\": \"15:00\",\n  \"reason\": \"Interpreter requested\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"{{appointment_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"nothing saved is not asserted here, shape only\", function () { pm.expect(j.appointment_id).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{appointment_member_id}}\",\n  \"provider_id\": \"9016225986\",\n  \"appointment_date\": \"2029-10-17\",\n  \"start_time\": \"15:00\",\n  \"reason\": \"Interpreter requested\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"{{appointment_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"appointment_id returned\", function () { pm.expect(j.appointment_id).to.be.ok; });",
+                  "pm.test(\"flagged synthetic\", function () { pm.expect(j.is_synthetic === true).to.be.ok; });",
+                  "pm.collectionVariables.set('appointment_id', j.appointment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment: repeat is idempotent",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{appointment_member_id}}\",\n  \"provider_id\": \"9016225986\",\n  \"appointment_date\": \"2029-10-17\",\n  \"start_time\": \"15:00\",\n  \"reason\": \"Interpreter requested\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"{{appointment_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"same id\", function () { pm.expect(j.appointment_id === pm.collectionVariables.get('appointment_id')).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment: missing provider_id is rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{appointment_member_id}}\",\n  \"appointment_date\": \"2029-10-17\",\n  \"start_time\": \"15:00\",\n  \"reason\": \"Interpreter requested\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"{{appointment_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', function () { pm.response.to.have.status(422); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"standard error body\", function () { pm.expect(j.error && j.error.code).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment: wrong last name fails closed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{appointment_member_id}}\",\n  \"provider_id\": \"9016225986\",\n  \"appointment_date\": \"2029-10-17\",\n  \"start_time\": \"15:00\",\n  \"reason\": \"Interpreter requested\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"NotTheName\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', function () { pm.response.to.have.status(403); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"VERIFICATION_FAILED\", function () { pm.expect(j.error.code === 'VERIFICATION_FAILED').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create Appointment: same slot, other member, 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{appointment_member2_id}}\",\n  \"provider_id\": \"9016225986\",\n  \"appointment_date\": \"2029-10-17\",\n  \"start_time\": \"15:00\",\n  \"reason\": \"Interpreter requested\",\n  \"dob\": \"{{appointment_dob2}}\",\n  \"last_name\": \"{{appointment_last_name2}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"CONFLICT\", function () { pm.expect(j.error.code === 'CONFLICT').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Appointment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments/{{appointment_id}}?dob={{appointment_dob}}&last_name={{appointment_last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments",
+                "{{appointment_id}}"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{appointment_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{appointment_last_name}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"appointment_id matches\", function () { pm.expect(j.appointment_id === pm.collectionVariables.get('appointment_id')).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Appointment: wrong date of birth fails closed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments/{{appointment_id}}?dob=1900-01-01&last_name=x",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments",
+                "{{appointment_id}}"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "1900-01-01"
+                },
+                {
+                  "key": "last_name",
+                  "value": "x"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', function () { pm.response.to.have.status(403); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"VERIFICATION_FAILED\", function () { pm.expect(j.error.code === 'VERIFICATION_FAILED').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Appointment: unknown id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments/no-such-id-0000?dob={{appointment_dob}}&last_name={{appointment_last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments",
+                "no-such-id-0000"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{appointment_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{appointment_last_name}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"NOT_FOUND\", function () { pm.expect(j.error.code === 'NOT_FOUND').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Appointment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments?member_id={{appointment_member_id}}&dob={{appointment_dob}}&last_name={{appointment_last_name}}&limit=100",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "member_id",
+                  "value": "{{appointment_member_id}}"
+                },
+                {
+                  "key": "dob",
+                  "value": "{{appointment_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{appointment_last_name}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"has items\", function () { pm.expect(Array.isArray(j.items)).to.be.ok; });",
+                  "pm.test(\"count matches\", function () { pm.expect(j.count === j.items.length).to.be.ok; });",
+                  "pm.test(\"created record is listed\", function () { pm.expect(j.items.some(i => i.appointment_id === pm.collectionVariables.get('appointment_id'))).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Appointment: verification factors required",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments?member_id={{appointment_member_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "member_id",
+                  "value": "{{appointment_member_id}}"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 422', function () { pm.response.to.have.status(422); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"standard error body\", function () { pm.expect(j.error && j.error.code).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Appointment: BOOKED to CANCELLED",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments",
+                "{{appointment_id}}"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CANCELLED\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"{{appointment_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"status is CANCELLED\", function () { pm.expect(j.status === \"CANCELLED\").to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Appointment: CANCELLED back to BOOKED is not allowed",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/appointments/{{appointment_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "appointments",
+                "{{appointment_id}}"
+              ],
+              "query": []
+            },
+            "description": "",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BOOKED\",\n  \"dob\": \"{{appointment_dob}}\",\n  \"last_name\": \"{{appointment_last_name}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 409', function () { pm.response.to.have.status(409); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"INVALID_TRANSITION\", function () { pm.expect(j.error.code === 'INVALID_TRANSITION').to.be.ok; });",
+                  "pm.test(\"allowed list returned\", function () { pm.expect(Array.isArray(j.error.details.allowed)).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Referral",
+      "item": [
+        {
+          "name": "Get Referral",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/referrals/{{referral_row_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "referrals",
+                "{{referral_row_id}}"
+              ],
+              "query": []
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"referral_id matches\", function () { pm.expect(j.referral_id === pm.collectionVariables.get('referral_row_id')).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get Referral: unknown id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/referrals/no-such-id-0000",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "referrals",
+                "no-such-id-0000"
+              ],
+              "query": []
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 404', function () { pm.response.to.have.status(404); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"NOT_FOUND\", function () { pm.expect(j.error.code === 'NOT_FOUND').to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List Referral",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/referrals?limit=100",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "referrals"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            },
+            "description": ""
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test(\"has items\", function () { pm.expect(Array.isArray(j.items)).to.be.ok; });",
+                  "pm.test(\"count matches\", function () { pm.expect(j.count === j.items.length).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
