@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
-from .. import blueprint, data_engine, rules, schema
+from .. import blueprint, data_engine, rules, schema, dynamic
 from ..common import CATALOG_VERSION, GEN_VERSION, RULESET_VERSION, canon
 from ..api import app as api_app, build as api_build, catalog, contract_gen
 from . import payloads as P
@@ -82,6 +82,9 @@ def create_control_app(runs_dir, token=None, max_members=None, public_base=None)
             if getattr(j, k) != v: raise CtlError(422, "VERSION_MISMATCH", f"{k} {getattr(j, k)} is not supported by this engine ({v})")
         if j.id_strategy != "UUIDv5(dataset_id, entity, seed, row_index)": raise CtlError(422, "ID_STRATEGY_UNSUPPORTED", "Only the UUIDv5 id strategy is supported")
         if j.volumes.members > max_members: raise CtlError(413, "ROW_LIMIT", f"members {j.volumes.members} exceeds this engine's limit {max_members}", {"limit": max_members})
+        if j.custom_entities:
+            try: dynamic.parse_spec(j.custom_entities, None, schema.core_cols())
+            except dynamic.SpecError as ex: raise CtlError(422, "INVALID_CUSTOM_SPEC", str(ex))
         bp = blueprint.from_job(json.loads(j.model_dump_json(exclude_none=True)))
         if bp["data_spec"]["data_spec_hash"] != j.data_spec_hash:
             raise CtlError(422, "DATA_SPEC_MISMATCH", "data_spec_hash does not match the data-defining fields of the payload", {"computed": bp["data_spec"]["data_spec_hash"]})
@@ -151,18 +154,26 @@ def create_control_app(runs_dir, token=None, max_members=None, public_base=None)
             unknown = [e for e in j.endpoints if e not in ops]
             if unknown: raise CtlError(422, "UNKNOWN_ENDPOINT", f"Endpoints {unknown} are not part of use cases {j.use_cases}", {"available": sorted(ops - {"createAccessToken"})})
             ops = {"createAccessToken", *j.endpoints}
+        custom = None
+        if j.custom_endpoints or j.custom_entities:
+            try: cs = dynamic.parse_spec(j.custom_entities, j.custom_endpoints, schema.core_cols())
+            except dynamic.SpecError as ex: raise CtlError(422, "INVALID_CUSTOM_SPEC", str(ex))
+            custom = {"entities": j.custom_entities, "endpoints": j.custom_endpoints}; ops = ops | cs.op_ids()
         h = phash(j)
         with store.lock(j.run_id):
             run = run_or_404(j.run_id)
+            if custom and (run["job_s3"].get("custom_entities") or None) != j.custom_entities:
+                raise CtlError(422, "CUSTOM_SPEC_MISMATCH", "custom_entities in the s8 payload differ from the ones the data was generated with")
             if run["state"] == "FAILED_GATE": raise CtlError(409, "GATE_FAILED", "The data quality gate failed for this run")
             if run["stages"].get("s7", {}).get("status") != "COMPLETED": raise CtlError(409, "STAGE_ORDER", "s8 requires s7 to be COMPLETED first")
             if run["api"] and run["api"]["payload_hash"] == h and run["api"]["result"]["status"] == "DEPLOYED":
                 return JSONResponse(run["api"]["result"], headers={"Idempotent-Replay": "true"})
             t0 = time.time(); d = store.dir(j.run_id); db = os.path.join(d, "factory.db"); out = os.path.join(d, "api")
             cfg = api_app.Config(db_path=db, state_path=os.path.join(d, "api-state.db"), audit_path=os.path.join(d, "audit.jsonl"), fault_enabled=True,
-                                 fault_error_pct=j.fault_injection.error_rate_pct, fault_latency_p95_ms=j.fault_injection.latency_p95_ms, rate_limit_rpm=j.rate_limit.per_client_rpm, enabled_ops=ops)
+                                 fault_error_pct=j.fault_injection.error_rate_pct, fault_latency_p95_ms=j.fault_injection.latency_p95_ms, rate_limit_rpm=j.rate_limit.per_client_rpm, enabled_ops=ops, custom=custom)
+            if custom: json.dump({"custom_entities": custom["entities"], "custom_endpoints": custom["endpoints"]}, open(os.path.join(d, "custom-spec.json"), "w"), indent=1)
             spec, tm = api_build.write_artifacts(api_app.create_app(cfg), out)
-            ct = contract_gen.run(db, spec, tm, ops)
+            ct = contract_gen.run(db, spec, tm, ops, custom=custom)
             n_ep = len(ops - {"createAccessToken"}); rev = (run["api"]["revision_n"] + 1) if run["api"] else 1
             ok = ct["failed"] == 0 and len(tm["tools"]) == n_ep
             result = {"run_id": j.run_id, "stage": "s8", "job": j.job, "status": "DEPLOYED" if ok else "CONTRACT_TESTS_FAILED", "duration_s": round(time.time() - t0, 2),
@@ -170,7 +181,7 @@ def create_control_app(runs_dir, token=None, max_members=None, public_base=None)
                       "endpoint_count": n_ep, "tools_published": len(tm["tools"]), "operations": sorted(ops - {"createAccessToken"}),
                       "contract_tests": {"total": ct["total"], "passed": ct["passed"], "failed": ct["failed"], "failures": ct["failures"][:10]},
                       "fault_injection": j.fault_injection.model_dump(), "rate_limit": j.rate_limit.model_dump(),
-                      "run_command": f"HF_DB={db} HF_STATE_DB={cfg.state_path} HF_ENABLED_OPS={','.join(sorted(ops))} HF_FAULT_ERROR_PCT={j.fault_injection.error_rate_pct} HF_FAULT_P95_MS={j.fault_injection.latency_p95_ms} HF_RPM={j.rate_limit.per_client_rpm} python -m uvicorn hf_factory.api.app:from_env --factory --port 8080"}
+                      "run_command": f"HF_DB={db} " + (f"HF_CUSTOM_SPEC={os.path.join(d, 'custom-spec.json')} " if custom else "") + f"HF_STATE_DB={cfg.state_path} HF_ENABLED_OPS={','.join(sorted(ops))} HF_FAULT_ERROR_PCT={j.fault_injection.error_rate_pct} HF_FAULT_P95_MS={j.fault_injection.latency_p95_ms} HF_RPM={j.rate_limit.per_client_rpm} python -m uvicorn hf_factory.api.app:from_env --factory --port 8080"}
             run["api"] = dict(payload_hash=h, revision_n=rev, result=result); run["state"] = "DEPLOYED" if ok else "API_FAILED"; run["updated_at"] = now(); store.save(run)
             return JSONResponse(result)
 

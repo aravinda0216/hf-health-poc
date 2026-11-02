@@ -1,18 +1,61 @@
 # Healthcare AI Platform Factory — Data engine + API engine (POC v0.1)
 
-Scenarios **S1-S4** (blueprints/). Provider use cases: PCS, PAS, PEV, PAP, PPI, PON. Member use cases: MBN, MCI, MPS, MPC, MAS (4 smoke scenarios each, 44 total). Lines of business: Medicare Advantage, Medicaid MCO, Commercial.
-Also: control plane (`hf_factory/control`), run profiles (`local`, `memory`, `gcp`), pluggable knowledge search (`lexical`, in-memory `vector`, Vertex AI), Dockerfile, design docs in `docs/`.
+Scenarios **S1-S5** (blueprints/). **New data and API capabilities are defined in the blueprint, not in code** (see "Blueprint-defined entities and APIs"). Provider use cases: PCS, PAS, PEV, PAP, PPI, PON. Member use cases: MBN, MCI, MPS, MPC, MAS (4 smoke scenarios each, 44 total). Lines of business: Medicare Advantage, Medicaid MCO, Commercial.
+Also: blueprint-driven entities/endpoints (`hf_factory/dynamic`), control plane (`hf_factory/control`), run profiles (`local`, `memory`, `gcp`), pluggable knowledge search (`lexical`, in-memory `vector`, Vertex AI), Dockerfile, design docs in `docs/`.
 Stubbed upstream: interpreter, blueprint engine (sample blueprint JSONs), orchestrator (`hf_factory/run.py`), infra engine (SQLite, or GCS + Vertex AI on the `gcp` profile).
 
     make install      # pip install -U -r requirements.txt (needs starlette>=0.40 with httpx>=0.28; else: TypeError ... unexpected keyword argument 'app')
     make demo         # 1,000 members, ~2 s:  blueprint -> data (s3-s7) -> API (s8) -> smoke (s10) -> delivery manifest
     make demo-full    # 50,000 members (blueprint scale), ~35 s, ~820k rows
-    make test         # 128 tests
+    make test         # 148 tests
     make repro        # replay / re-seed / evolve checks
     make serve        # uvicorn on :8080 (fault injection on); client id hf-demo-client / secret demo-secret-change-me
     make serve-memory # same API fully in memory (dataset copied into RAM, state gone on exit, in-memory vector search)
     make serve-gcp    # dataset from Cloud Storage, knowledge search on Vertex AI (see "Run modes")
     make docker-build # docker build -t hf-factory .
+
+## Blueprint-defined entities and APIs
+The engines are driven by the blueprint, not only by switches over pre-written code. Add an entity under `data_spec.custom_entities` and endpoints under `api_spec.custom_endpoints`; the factory turns them into a table, deterministic records, validation rules, live routes, OpenAPI, agent tools, contract tests and smoke scenarios. **No Python is written per entity.** `blueprints/s5_custom_appointments.json` does exactly this for 15,000 members with claims (PCS) and eligibility (PEV) APIs plus an Appointment entity and `POST /appointments`:
+
+    "custom_entities": [{ "name": "Appointment", "count": {"ratio": {"of": "member_demographics", "value": 0.8}},
+      "fields": [ {"name": "appointment_id",   "type": "id", "primary_key": true},
+                  {"name": "member_id",        "type": "ref", "ref": "member_demographics.member_id"},
+                  {"name": "provider_id",      "type": "ref", "ref": "provider.npi"},
+                  {"name": "appointment_date", "type": "date", "offset_days": [-30, 60]},
+                  {"name": "start_time",       "type": "enum", "values": ["08:00", "08:30", "09:00"]},
+                  {"name": "status",           "type": "enum", "values": {"BOOKED": 70, "COMPLETED": 20, "CANCELLED": 10}, "default": "BOOKED", "server_set": true} ],
+      "unique": [["provider_id", "appointment_date", "start_time"]], "unique_exempt": {"status": ["CANCELLED"]} }]
+    "custom_endpoints": [
+      {"method": "POST",  "path": "/appointments",                  "entity": "Appointment", "operation": "create", "verify_member": "member_id"},
+      {"method": "GET",   "path": "/appointments/{appointment_id}", "entity": "Appointment", "operation": "get",    "verify_member": "member_id"},
+      {"method": "GET",   "path": "/appointments",                  "entity": "Appointment", "operation": "list",   "filters": ["member_id", "status"], "verify_member": "member_id"},
+      {"method": "PATCH", "path": "/appointments/{appointment_id}", "entity": "Appointment", "operation": "update", "updatable": ["status"], "transitions": {"BOOKED": ["CANCELLED", "COMPLETED"]}, "verify_member": "member_id"} ]
+
+    python3 -m hf_factory.run --blueprint blueprints/s5_custom_appointments.json --out out/s5       # 15,000 members, ~9 s
+    HF_DB=out/s5/factory.db HF_CUSTOM_SPEC=out/s5/custom-spec.json make serve                        # serve it
+
+**What the blueprint can say**
+
+| Part | Options |
+|---|---|
+| Field `type` | `id` (UUID), `string` (`pattern` like `APT-{seq:6}`, or `generator`: first_name, last_name, full_name, city, state, phone, email, sentence), `text`, `int`, `float` (`min`, `max`, `mean`, `sd`), `bool` (`p`), `date` / `datetime` (`offset_days` from the as-of date, or `after` another field), `enum` (list, or `{value: weight}`), `ref` (`table.column` in the built-in schema or another custom entity), `json` |
+| Field flags | `primary_key`, `required`, `null_rate`, `default`, `server_set` (not accepted from callers), `description` |
+| `count` | `fixed`, `ratio` of another table, or `per_parent` (min..max children per row of a parent table; the ref field to that parent is assigned) |
+| Entity | `unique` (composite), `unique_exempt` (values that free the slot, e.g. CANCELLED), `scenario_id` |
+| Endpoint `operation` | `create` (POST), `get`, `list` (GET, with `filters`, `limit`, `offset`), `update` (PATCH, `updatable` fields, enum `transitions`) |
+| Endpoint options | `verify_member` (caller must give that member's date of birth and last name; any mismatch is the standard 403 that discloses nothing), `summary`, `operation_id`, agent-tool `when` / `escalate` / `never` |
+
+**What is generated**
+- **Data engine:** table and indexes (registered in the same schema as the built-in tables, so R-01 orphan checks, checksums and the manifest cover them); records generated deterministically in dependency order; six generated rules, X-01 primary keys, X-02 required fields, X-03 enum values, X-04 numeric ranges, X-05 unique constraints, X-06 `after` dates. Definitions are validated up front with errors that name the entity and field. The definition is part of `data_spec_hash`.
+- **API engine:** routes with typed, range-checked request models; references must exist (404 `REFERENCE_NOT_FOUND`), unique clash is 409 `CONFLICT`, `dry_run` on writes, idempotent ids (repeating a request returns the same record), illegal status change is 409 `INVALID_TRANSITION`; OpenAPI and agent-tool entries with guardrails; four generated contract tests per endpoint; generated smoke scenarios (create and read back, invalid or unverified request rejected, idempotent repeat, unique clash, allowed transitions, appears in list). Writes go to the state store, never the dataset; a dataset row that is updated is copied to state and read from there.
+- **Control plane:** the s3..s7 and s8 payloads carry `custom_entities` / `custom_endpoints`; bad definitions are rejected with 422 `INVALID_CUSTOM_SPEC`.
+
+**Limits (honest)**
+- The built-in entities (members, claims, authorizations, providers, appeals, ...) and their endpoints are still hand-written. The custom layer is additive; it can reference them but does not replace them.
+- Generated endpoints are create / get / list / update with declarative rules: types, ranges, enums, references, uniqueness, status transitions and member verification. Business logic beyond that (availability windows, a 24-hour cancellation rule, benefit calculations) is not generated from a definition; it still needs code or a new declarative rule type.
+- There is no LLM in the loop: the definition is turned into code paths deterministically, so a request in free text must first become a blueprint definition (the interpreter and blueprint engine are separate work).
+- Custom tables hold generated data in the dataset; created or changed records live in the state store (ephemeral on Cloud Run).
+- The schema registry is process-global; data stages of different runs in one control-plane process take turns.
 
 ## Run modes
 `HF_PROFILE` picks where data lives; `HF_SEARCH` picks how knowledge search works. The API code is identical in every mode.

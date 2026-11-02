@@ -176,6 +176,8 @@ def build_rules(con, ctx, vol):
          sum(1 for u in ("MBN", "MCI", "MPS", "MPC", "MAS") for t in ("AGENT_SOP", "FAQ_LIBRARY")
              if q1(con, "SELECT COUNT(*) FROM asset_link l JOIN knowledge_asset a ON a.asset_id=l.asset_id WHERE l.linked_entity='USE_CASE' AND l.linked_key=? AND a.asset_type=? AND a.status='ACTIVE'", u, t) == 0)
          + q1(con, "SELECT COUNT(*) FROM plan p WHERE NOT EXISTS (SELECT 1 FROM knowledge_asset a WHERE a.asset_type='BENEFIT_DOC' AND a.plan_id=p.plan_id AND a.status='ACTIVE')"))
+    if getattr(ctx, "custom", None):          # generated rules for blueprint-defined entities
+        from .dynamic import rules as dyn_rules; dyn_rules.add(rule, con, ctx.custom)
     return out
 
 # Aggregate privacy checks: no near-duplicate people, and a count of small quasi-identifier groups (<11) for the report.

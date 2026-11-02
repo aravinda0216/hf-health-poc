@@ -16,6 +16,7 @@ Postman: `postman/hf-provider-api.postman_collection.json` (S1) and `postman/hf-
 | S2 | `s2_medicaid_member.json` | Medicaid, member use cases, 35% Spanish, 40% rural, 25% caregivers, 15% edge, 100k members |
 | S3 | `s3_commercial_scale.json` | Commercial, 150k members, ~1M claims, 30% denials, 30% edge |
 | S4 | `s4_commercial_sandbox.json` | Commercial sandbox, 20k members, MBN/MCI/PCS |
+| S5 | `s5_custom_appointments.json` | 15k members with claims and eligibility APIs, plus Appointment and Referral entities and a booking API defined only in the blueprint |
 
 In-memory: `make serve-memory`. GCP: see the README "Run modes" (`gcp_publish`, then `make serve-gcp`).
 

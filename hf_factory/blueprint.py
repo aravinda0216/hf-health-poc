@@ -30,6 +30,7 @@ def patch(bp, members=None, seed=None, evolve_from=None):
     ds["volumes"] = {**derive_volumes(n, months, base, cpm), "history_months": months, **({"claims_per_member_year": cpm} if "claims_per_member_year" in ds["volumes"] else {})}
     if seed is not None: bp["repeatability"]["root_seed"] = int(seed)
     bp["blueprint_version"] = bp.get("blueprint_version", "1.0.0")
+    validate_custom(bp)
     finalize(bp)
     return bp
 
@@ -39,7 +40,8 @@ def data_core(bp):
     return {"dataset_id": ds["dataset_id"], "root_seed": r["root_seed"], "as_of_date": r["as_of_date"], "catalog_version": r["catalog_version"],
             "rule_set_version": r["rule_set_version"], "generator_version": r["generator_version"], "use_cases": bp["scope"]["use_cases"],
             "volumes": ds["volumes"], "edge": ds["edge_case_pct"], "lob": ds["distributions"]["lob_mix"],
-            **{k: ds["distributions"][k] for k in DIST_KEYS if k in ds["distributions"]}}
+            **{k: ds["distributions"][k] for k in DIST_KEYS if k in ds["distributions"]},
+            **({"custom_entities": ds["custom_entities"]} if ds.get("custom_entities") else {})}      # blueprint-defined entities change the data, so they are hashed
 
 # Recompute both hashes after any patch so they always match the content (data_spec_hash first, then the whole-blueprint hash).
 def finalize(bp):
@@ -47,6 +49,11 @@ def finalize(bp):
     bp["data_spec"]["data_spec_hash"] = sha(data_core(bp))
     bp["blueprint_hash"] = sha(bp)
     return bp
+
+def validate_custom(bp):
+    """Fail fast on a bad custom entity / endpoint definition (raises dynamic.SpecError naming the entity and field). Returns the parsed spec or None."""
+    from . import dynamic, schema
+    return dynamic.parse_spec(bp["data_spec"].get("custom_entities"), (bp.get("api_spec") or {}).get("custom_endpoints"), schema.core_cols())
 
 def stage_seed(root_seed, stage_id):
     """Per-stage seed carried in every job payload. The control plane recomputes it and rejects a payload whose value differs."""
@@ -62,6 +69,7 @@ def job_spec(bp, stage, entities, extra=None, run_id=None):
             "as_of_date": r["as_of_date"], "catalog_version": r["catalog_version"], "rule_set_version": r["rule_set_version"], "generator_version": r["generator_version"],
             "id_strategy": r["id_strategy"], "dataset_id": ds["dataset_id"], "use_cases": bp["scope"]["use_cases"], "lob_mix": ds["distributions"]["lob_mix"],
             "distributions": {k: ds["distributions"][k] for k in DIST_KEYS if k in ds["distributions"]},
+            **({"custom_entities": ds["custom_entities"]} if ds.get("custom_entities") else {}),
             "blueprint_hash": bp["blueprint_hash"], "data_spec_hash": ds["data_spec_hash"], "entities": entities,
             "volumes": ds["volumes"], "edge_case_pct": ds["edge_case_pct"], "rules": stage.get("rules", []), **(extra or {})}
 
@@ -70,7 +78,8 @@ def api_job_spec(bp, run_id=None):
     a = bp["api_spec"]
     return {"job": "api_generate_and_deploy", "stage": "s8", "run_id": run_id or "run_" + bp["blueprint_hash"][7:19], "style": a["style"], "base_path": a["base_path"],
             "use_cases": bp["scope"]["use_cases"], "auth": {"type": a["auth"], "secret_ref": "env:HF_CLIENT_SECRET"}, "rate_limit": {"per_client_rpm": a["rate_limit_rpm"]},
-            "fault_injection": a["fault_injection"], "agent_tools": a["agent_tools"]}
+            "fault_injection": a["fault_injection"], "agent_tools": a["agent_tools"],
+            **({"custom_entities": bp["data_spec"]["custom_entities"], "custom_endpoints": a["custom_endpoints"]} if a.get("custom_endpoints") else {})}
 
 def from_job(j):
     """Rebuild the data-relevant part of a blueprint from an s3 job payload (what the control plane does, since it only receives job payloads).
@@ -78,7 +87,8 @@ def from_job(j):
     bp = {"blueprint_id": "bp-" + j["run_id"], "scope": {"use_cases": j["use_cases"]},
           "repeatability": {"root_seed": j["root_seed"], "as_of_date": j["as_of_date"], "catalog_version": j["catalog_version"], "rule_set_version": j["rule_set_version"],
                             "generator_version": j["generator_version"], "id_strategy": j["id_strategy"]},
-          "data_spec": {"dataset_id": j["dataset_id"], "volumes": j["volumes"], "edge_case_pct": j["edge_case_pct"], "distributions": {"lob_mix": j["lob_mix"], **(j.get("distributions") or {})}}}
+          "data_spec": {"dataset_id": j["dataset_id"], "volumes": j["volumes"], "edge_case_pct": j["edge_case_pct"], "distributions": {"lob_mix": j["lob_mix"], **(j.get("distributions") or {})},
+                       **({"custom_entities": j["custom_entities"]} if j.get("custom_entities") else {})}}
     finalize(bp)
     return bp
 

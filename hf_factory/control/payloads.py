@@ -1,6 +1,6 @@
 """Request models for the control plane: the per-stage job payloads the orchestrator sends (shapes from the architecture document)."""
 from datetime import date
-from typing import Dict, List, Literal, Optional, Union
+from typing import Any, Dict, List, Literal, Optional, Union
 Num = Union[int, float]   # keep ints as ints: the data_spec_hash is computed over canonical JSON, where 1 and 1.0 differ
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -30,6 +30,7 @@ class DataJob(BaseModel):
     edge_case_pct: Num = Field(..., ge=0, le=100)
     blueprint_hash: str; data_spec_hash: str
     entities: List[str] = Field(default_factory=list); rules: List[str] = Field(default_factory=list)
+    custom_entities: Optional[List[Dict[str, Any]]] = Field(None, description="Blueprint-defined entities (see hf_factory/dynamic/spec.py); validated on receipt")
 
     @field_validator("as_of_date")
     @classmethod
@@ -50,4 +51,5 @@ class ApiJob(BaseModel):
     style: str = "REST, OpenAPI 3.1"; base_path: Literal["/v1"] = "/v1"
     use_cases: List[str] = Field(..., min_length=1)
     endpoints: Optional[List[str]] = None
+    custom_entities: Optional[List[Dict[str, Any]]] = None; custom_endpoints: Optional[List[Dict[str, Any]]] = None     # blueprint-defined entities and endpoints (generated routes)
     auth: AuthSpec = AuthSpec(); rate_limit: RateLimit = RateLimit(); fault_injection: FaultSpec = FaultSpec(); agent_tools: bool = True

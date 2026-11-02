@@ -30,6 +30,7 @@ MAX_ELIG_BATCH = 5
 class Config:
     db_path: str
     state_path: str = ""
+    custom: object = None              # blueprint-defined entities and endpoints: {"entities": [...], "endpoints": [...]} (see hf_factory/dynamic)
     search_backend: object = None      # a search backend instance; None = chosen by HF_SEARCH / HF_PROFILE
     audit_path: str = ""
     client_id: str = "hf-demo-client"
@@ -405,6 +406,14 @@ def create_app(cfg: Config) -> FastAPI:
     from . import member_ext
     member_ext.register(router, SimpleNamespace(con_ro=con_ro, state=state, src=src, SRC_BASE=SRC_BASE, AS_OF=AS_OF, NOW=NOW, lock=lock, prot=prot, ERR=ERR, GUARD=GUARD, ApiError=ApiError, digits=digits, cfg=cfg))
     provider_ext.register(router, SimpleNamespace(con_ro=con_ro, state=state, verify_provider=verify_provider, src=src, SRC_BASE=SRC_BASE, AS_OF=AS_OF, NOW=NOW, lock=lock, prot=prot, ERR=ERR, GUARD=GUARD, ApiError=ApiError, digits=digits))
+    # Blueprint-defined endpoints (api_spec.custom_endpoints): validated, then mounted from the definitions alone. Their operationIds join the enabled set.
+    if cfg.custom:
+        from .. import schema as _schema
+        from ..dynamic import parse_spec, api as dyn_api
+        cs = cfg.custom if hasattr(cfg.custom, "endpoints") else parse_spec(cfg.custom.get("entities"), cfg.custom.get("endpoints"), _schema.core_cols(), [r.path for r in router.routes])
+        dyn_api.register(router, cs, SimpleNamespace(con_ro=con_ro, state=state, lock=lock, prot=prot, ERR=ERR, ApiError=ApiError))
+        if cfg.enabled_ops is not None: cfg.enabled_ops = set(cfg.enabled_ops) | cs.op_ids()
+        app.state.custom = cs
     # Generic backend: drop routes whose operationId is not enabled for this deployment (before the router is mounted), so the OpenAPI spec and the tool manifest only describe what is live.
     if cfg.enabled_ops is not None:
         router.routes[:] = [r for r in router.routes if getattr(r, "operation_id", None) is None or r.operation_id in cfg.enabled_ops]
@@ -418,10 +427,18 @@ def _erfinv(x):
     return math.copysign(math.sqrt(math.sqrt(t * t - ln / a) - t), x)
 
 # Entry point for `make serve` (uvicorn --factory). Reads HF_DB, HF_AUDIT, HF_FAULT and rate-limit settings from the environment.
+def _custom_from_env():
+    # HF_CUSTOM_SPEC: path to a JSON file holding {"custom_entities": [...], "custom_endpoints": [...]} or a whole blueprint.
+    p = os.environ.get("HF_CUSTOM_SPEC")
+    if not p: return None
+    j = json.load(open(p)); ds, ap = j.get("data_spec", j), j.get("api_spec", j)
+    return {"entities": ds.get("custom_entities"), "endpoints": ap.get("custom_endpoints")}
+
+
 def from_env():
     # HF_ENABLED_OPS (comma list of operationIds) restricts the exposed endpoints; the control plane's s8 result prints a ready-made run_command.
     ops = os.environ.get("HF_ENABLED_OPS")
-    cfg = Config(db_path=os.environ.get("HF_DB") or os.environ["HF_DATASET_URI"], state_path=os.environ.get("HF_STATE_DB", ""), audit_path=os.environ.get("HF_AUDIT", ""), fault_enabled=os.environ.get("HF_FAULT", "on") == "on",
+    cfg = Config(db_path=os.environ.get("HF_DB") or os.environ["HF_DATASET_URI"], custom=_custom_from_env(), state_path=os.environ.get("HF_STATE_DB", ""), audit_path=os.environ.get("HF_AUDIT", ""), fault_enabled=os.environ.get("HF_FAULT", "on") == "on",
                  fault_error_pct=float(os.environ.get("HF_FAULT_ERROR_PCT", "1")), fault_latency_p95_ms=int(os.environ.get("HF_FAULT_P95_MS", "450")),
                  rate_limit_rpm=int(os.environ.get("HF_RPM", "600")), enabled_ops=set(ops.split(",")) if ops else None)
     return create_app(cfg)

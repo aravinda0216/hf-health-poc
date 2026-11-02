@@ -64,14 +64,18 @@ def _error_ok(r):
     j = r.json()
     return isinstance(j.get("error"), dict) and bool(j["error"].get("code")) and bool(j["error"].get("message")) and j.get("is_synthetic") is True
 
-def run(db_path, spec, tools, enabled_ops, log=print):
+def run(db_path, spec, tools, enabled_ops, log=print, custom=None):
     """Run the four generated checks for every enabled business operation. Returns {total, passed, failed, failures[], per_operation{}}."""
     con = sqlite3.connect(db_path); con.row_factory = sqlite3.Row; S = {}
     for b in SAMPLE_BUILDERS: S.update(b(con))
+    cust_ops = set()
     # Isolated app + state DB so write endpoints do not touch any other state; fault injection off so results are deterministic.
-    cl = TestClient(A.create_app(A.Config(db_path=db_path, state_path=tempfile.mktemp(), fault_enabled=False, enabled_ops=set(enabled_ops))))
+    cl = TestClient(A.create_app(A.Config(db_path=db_path, state_path=tempfile.mktemp(), fault_enabled=False, enabled_ops=set(enabled_ops), custom=custom)))
     tok = cl.post("/v1/oauth/token", data={"grant_type": "client_credentials", "client_id": "hf-demo-client", "client_secret": A.Config(db_path="x").client_secret}).json()["access_token"]
     H = {"Authorization": "Bearer " + tok}
+    if custom:           # samples for the blueprint-defined endpoints are generated from their definitions
+        from ..dynamic import testgen
+        sp = testgen.Sampler(db_path, cl.app.state.custom, cl, H); S.update(testgen.contract_samples(sp)); cust_ops = cl.app.state.custom.op_ids(); enabled_ops = set(enabled_ops) | cust_ops
     by_id = {op["operationId"]: (path, m, op) for path, ops in spec["paths"].items() for m, op in ops.items()}
     tool_names = {t["name"]: t for t in tools["tools"]}
     out = {"total": 0, "passed": 0, "failed": 0, "failures": [], "per_operation": {}}
@@ -83,12 +87,12 @@ def run(db_path, spec, tools, enabled_ops, log=print):
         if op not in by_id or s is None:
             rec(op, "response_conforms", False, "operation missing from spec or no sample"); continue
         path, method, o = by_id[op]
-        call = lambda hdr=None, **kw: cl.request(s["method"], s["path"], headers=hdr, **{k: v for k, v in kw.items()})
+        call = lambda hdr=None, path=None, **kw: cl.request(s["method"], path or s["path"], headers=hdr, **{k: v for k, v in kw.items()})
         base = {k: s[k] for k in ("params", "json") if k in s}
         # 1 auth required
         r = call(**base); rec(op, "auth_required", r.status_code == 401 and _error_ok(r), f"status {r.status_code}")
         # 2 invalid request rejected with the standard error body
-        r = call(H, **{**{k: v for k, v in base.items() if k not in s["bad"]}, **s["bad"]}); rec(op, "invalid_rejected", 400 <= r.status_code < 500 and _error_ok(r), f"status {r.status_code} {r.text[:120]}")
+        r = call(H, path=s.get("bad_path"), **{**{k: v for k, v in base.items() if k not in s["bad"]}, **s["bad"]}); rec(op, "invalid_rejected", 400 <= r.status_code < 500 and _error_ok(r), f"status {r.status_code} {r.text[:120]}")
         # 3 valid request conforms to the declared response schema
         r = call(H, **base)
         ok = r.status_code == s["ok"]; why = f"status {r.status_code} expected {s['ok']}"

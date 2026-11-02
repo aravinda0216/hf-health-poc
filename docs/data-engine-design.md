@@ -21,3 +21,6 @@ Every row is a pure function of `(root_seed, stage, entity, index)`. Ids are UUI
 
 ## Known limits
 Text is templated (no LLM). No deductibles. Assigned PCPs are often beyond 50 miles. Specialist-referral rules, MPA, MRX and MBP are not built. No sharding or failed-shard retry: each stage runs in one process.
+
+## Blueprint-defined entities (`hf_factory/dynamic`)
+`data_spec.custom_entities` adds tables without code: `spec.py` validates the definitions, `schema.register_custom` adds them to the schema registries (tables, foreign keys, order), `generate.py` produces rows (generated in s6, after members and claims exist so references resolve), and `rules.py` adds rules X-01..X-06. Rows are pure functions of `(root_seed, "sx", table, row index)`; `unique` constraints are met by deterministic retries. Custom tables are excluded from the evolve prefix check because their counts can depend on parent tables. See the README for the full format and the limits.

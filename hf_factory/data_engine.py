@@ -7,6 +7,16 @@ import json, os, time
 from . import schema, rules, blueprint
 from .common import Ctx
 from .gen import ref, members, claims_auth, knowledge
+from . import dynamic
+from .dynamic import generate as dyn_gen
+
+def _stage(fn):
+    """Run a stage with the schema registry set to THIS run's custom entities. The registry is process-global, so stages of different runs (control plane) take turns."""
+    def wrapper(self, *a, **k):
+        with schema.LOCK:
+            self._register(); return fn(self, *a, **k)
+    wrapper.__name__ = fn.__name__; wrapper.__doc__ = fn.__doc__; return wrapper
+
 
 STAGE_ORDER = ["s3", "s4", "s5", "s6", "s7"]
 
@@ -20,11 +30,20 @@ class DataRun:
         self.ctx = Ctx(ds["dataset_id"], rp["root_seed"], rp["as_of_date"], ds["edge_case_pct"], self.vol)
         dist = ds.get("distributions", {}); self.ctx.lob_mix = dist.get("lob_mix", {"MEDICARE_ADV": 1}); self.ctx.dist = {k: dist[k] for k in blueprint.DIST_KEYS if k in dist}
         # resume_done: stages already completed in an earlier process (control-plane restart). The database is kept and the stage objects are rebuilt from the seed.
-        self.con = schema.connect(db_path, fresh=not resume_done)
-        if not resume_done: schema.create_all(self.con)
+        # Blueprint-defined entities: validated, then registered in the schema so tables, indexes, rule R-01, checksums and the manifest pick them up.
+        self.custom = dynamic.parse_spec(ds.get("custom_entities"), None, schema.core_cols())
+        self.ctx.custom = self.custom
+        with schema.LOCK:
+            self._register()
+            self.con = schema.connect(db_path, fresh=not resume_done)
+            if not resume_done: schema.create_all(self.con)
         self.sink = schema.Sink(self.con, self.ctx)
         self.t0 = time.time(); self.done = list(resume_done or []); self.m = members.Members(self.ctx, self.vol) if resume_done else None; self.ca = None
         self.rep = self.man = self.scan = None; self.entity_rows = {}
+
+    def _register(self):
+        if self.custom: schema.register_custom(dyn_gen.schema_tables(self.custom))
+        else: schema.unregister_custom()
 
     def _stamp(self, s): self.log(f"  {s:<34} {time.time()-self.t0:6.1f}s")
 
@@ -40,16 +59,19 @@ class DataRun:
     def _need(self, prev):
         if prev not in self.done: raise RuntimeError(f"stage {prev} has not completed")
 
+    @_stage
     def s3(self):
         # s3: reference data (providers, networks, locations).
         ref.generate(self.ctx, self.sink, self.vol); self.done.append("s3"); self._stamp("s3 reference data")
         return self._count(["plan", "provider", "practice_location", "appointment_slot", "network_participation", "ref_code"])
 
+    @_stage
     def s4(self):
         # s4: members, plans, accumulators, PCP assignment and care gaps.
         self._need("s3"); self.m = members.Members(self.ctx, self.vol); self.m.generate(self.sink); self.done.append("s4"); self._stamp("s4 members")
         return self._count(["member_demographics", "plan_enrollment", "pcp_assignment", "family_relationship", "member_accumulator", "risk_score", "care_gap", "sdoh_indicator"])
 
+    @_stage
     def s5(self):
         # s5: authorizations first, then claims (claims can reference auths). Indexes are created after the bulk insert for speed.
         self._need("s4"); self.ca = claims_auth.ClaimsAuth(self.ctx, self.vol, self.m); self.ca.emit_auth(self.sink); self.ca.emit_claims(self.sink)
@@ -57,11 +79,16 @@ class DataRun:
         self.con.commit(); self.ca.derive(self.con, self.sink); self.done.append("s5"); self._stamp("s5 claims + authorizations")
         return self._count(["auth_request", "auth_line", "auth_determination", "clinical_review_queue", "documentation_requirement", "claim_header", "claim_line", "claim_payment", "claim_denial", "claim_pend", "claim_adjustment", "appeal_record", "reprocessing_history", "pharmacy_claim_detail"])
 
+    @_stage
     def s6(self):
         # s6 runs after s5 because transition-of-care rows and rule R-10 need claims (the spec lists s6 as parallel with s4; see README deviations).
-        self._need("s5"); knowledge.run(self.ctx, self.sink, self.con, self.vol, self.m); self.done.append("s6"); self._stamp("s6 care + knowledge")
-        return self._count(["care_case", "transition_of_care", "knowledge_asset", "asset_chunk", "asset_link", "faq_entry", "agent_sop", "qa_golden"])
+        self._need("s5"); knowledge.run(self.ctx, self.sink, self.con, self.vol, self.m)
+        # Blueprint-defined entities are generated here, after claims and members exist, so their references resolve.
+        if self.custom: dyn_gen.generate(self.custom, self.ctx, self.sink, self.con, self.log); self.sink.flush()
+        self.done.append("s6"); self._stamp("s6 care + knowledge + custom entities")
+        return self._count(["care_case", "transition_of_care", "knowledge_asset", "asset_chunk", "asset_link", "faq_entry", "agent_sop", "qa_golden"] + (list(schema.CUSTOM) if self.custom else []))
 
+    @_stage
     def s7(self):
         # s7: run all rules, the privacy scan, and write checksums into the manifest.
         self._need("s6"); bp, ctx, con = self.bp, self.ctx, self.con

@@ -152,3 +152,35 @@ class Sink:
             self.con.executemany(f"INSERT INTO {t} ({','.join(names)}) VALUES ({','.join('?'*len(names))})", data)
             self.n[t] = self.n.get(t, 0) + len(rows); self.buf[t] = []
         self.con.commit()
+
+
+# ---------------------------------------------------------------- blueprint-defined (custom) entities
+# Custom tables are added to the same registries (TABLES, FKS, ORDER, DERIVED) as the built-in ones, so DDL, indexes, the orphan-key rule R-01, checksums and
+# the manifest cover them with no extra code. The registry is process-global: a new run replaces whatever the previous run registered.
+import threading
+_CORE = set(TABLES)
+CUSTOM = {}
+LOCK = threading.RLock()       # held while a data stage runs: the registry is process-global, so stages of different runs take turns
+
+
+def core_cols():
+    """{table: {col: type letter}} of the built-in schema (what a custom entity may reference)."""
+    return {t: {c: ty for c, ty in spec["cols"]} for t, spec in TABLES.items() if t in _CORE}
+
+
+def unregister_custom():
+    for t in list(CUSTOM):
+        TABLES.pop(t, None); DERIVED.discard(t)
+        for k in [k for k in FKS if k.startswith(t + ".")]: FKS.pop(k)
+        if t in ORDER: ORDER.remove(t)
+    CUSTOM.clear()
+
+
+def register_custom(tables):
+    """tables = {table: {"pk": [col], "cols": [(name, letter)], "fks": {col: "table.col"}}}. Replaces any earlier registration."""
+    unregister_custom()
+    for t, d in tables.items():
+        if t in _CORE: raise ValueError(f"custom table {t} collides with a built-in table")
+        TABLES[t] = {"domain": "X", "pk": list(d["pk"]), "cols": list(d["cols"]) + COMMON}
+        for c, tgt in d.get("fks", {}).items(): FKS[f"{t}.{c}"] = tgt
+        ORDER.append(t); DERIVED.add(t); CUSTOM[t] = d      # derived: counts can depend on parent tables, so the evolve prefix check skips them

@@ -1,0 +1,329 @@
+{
+ "blueprint_id": "bp_custom_demo_05_v1",
+ "schema_version": "2.0",
+ "blueprint_version": "1.0.0",
+ "derived_from": "s4_commercial_sandbox",
+ "note": "S5: 15,000 members with claims and eligibility APIs, plus an Appointment entity and booking API defined entirely in this blueprint (no code), and a Referral entity.",
+ "repeatability": {
+  "root_seed": 20261105,
+  "as_of_date": "2026-10-12",
+  "catalog_version": "2.4.0",
+  "rule_set_version": "1.8.0",
+  "generator_version": "0.2.0",
+  "id_strategy": "UUIDv5(dataset_id, entity, seed, row_index)",
+  "llm": {
+   "mode": "templated",
+   "note": "v1 uses templated text; LLM + content-addressed cache is a later step"
+  }
+ },
+ "tenant": {
+  "id": "custom-demo-05",
+  "env": "demo",
+  "ttl_hours": 336
+ },
+ "scope": {
+  "use_cases": [
+   "PCS",
+   "PEV"
+  ],
+  "personas": [
+   "BILLING",
+   "OFFICE",
+   "MEMBER"
+  ],
+  "channels": [
+   "voice",
+   "chat"
+  ],
+  "domains": {
+   "primary": [
+    "C",
+    "A",
+    "M",
+    "K"
+   ],
+   "supporting": [
+    "P",
+    "CM"
+   ]
+  }
+ },
+ "data_spec": {
+  "dataset_id": "custom-demo-05",
+  "volumes": {
+   "members": 15000,
+   "history_months": 2
+  },
+  "distributions": {
+   "lob_mix": {
+    "COMMERCIAL": 1
+   },
+   "denial_rate": 0.1,
+   "pend_rate": 0.05
+  },
+  "edge_case_pct": 5,
+  "rule_sets": [
+   "R",
+   "T",
+   "F",
+   "C",
+   "P",
+   "A"
+  ],
+  "custom_entities": [
+   {
+    "name": "Appointment",
+    "description": "A booked visit between a member and a provider.",
+    "count": {
+     "ratio": {
+      "of": "member_demographics",
+      "value": 0.8
+     }
+    },
+    "fields": [
+     {
+      "name": "appointment_id",
+      "type": "id",
+      "primary_key": true
+     },
+     {
+      "name": "member_id",
+      "type": "ref",
+      "ref": "member_demographics.member_id",
+      "description": "Member who booked the visit"
+     },
+     {
+      "name": "provider_id",
+      "type": "ref",
+      "ref": "provider.npi",
+      "description": "Provider (NPI) the visit is with"
+     },
+     {
+      "name": "appointment_date",
+      "type": "date",
+      "offset_days": [
+       -30,
+       60
+      ]
+     },
+     {
+      "name": "start_time",
+      "type": "enum",
+      "values": [
+       "08:00",
+       "08:30",
+       "09:00",
+       "09:30",
+       "10:00",
+       "10:30",
+       "11:00",
+       "13:00",
+       "13:30",
+       "14:00",
+       "14:30",
+       "15:00",
+       "15:30",
+       "16:00"
+      ]
+     },
+     {
+      "name": "status",
+      "type": "enum",
+      "values": {
+       "BOOKED": 70,
+       "COMPLETED": 20,
+       "CANCELLED": 10
+      },
+      "default": "BOOKED",
+      "server_set": true
+     },
+     {
+      "name": "reason",
+      "type": "string",
+      "generator": "sentence",
+      "required": false,
+      "null_rate": 0.2
+     }
+    ],
+    "unique": [
+     [
+      "provider_id",
+      "appointment_date",
+      "start_time"
+     ]
+    ],
+    "unique_exempt": {
+     "status": [
+      "CANCELLED"
+     ]
+    }
+   },
+   {
+    "name": "Referral",
+    "description": "A referral from a primary care provider to a specialty.",
+    "count": {
+     "per_parent": {
+      "of": "member_demographics",
+      "min": 0,
+      "max": 2
+     }
+    },
+    "fields": [
+     {
+      "name": "referral_id",
+      "type": "string",
+      "primary_key": true,
+      "pattern": "REF-{seq:7}"
+     },
+     {
+      "name": "member_id",
+      "type": "ref",
+      "ref": "member_demographics.member_id"
+     },
+     {
+      "name": "referring_provider_id",
+      "type": "ref",
+      "ref": "provider.npi"
+     },
+     {
+      "name": "specialty",
+      "type": "enum",
+      "values": [
+       "CARDIOLOGY",
+       "DERMATOLOGY",
+       "ORTHOPEDICS",
+       "NEUROLOGY",
+       "ENDOCRINOLOGY"
+      ]
+     },
+     {
+      "name": "requested_date",
+      "type": "date",
+      "offset_days": [
+       -90,
+       0
+      ]
+     },
+     {
+      "name": "due_date",
+      "type": "date",
+      "after": "requested_date",
+      "offset_days": [
+       7,
+       30
+      ]
+     },
+     {
+      "name": "status",
+      "type": "enum",
+      "values": {
+       "OPEN": 50,
+       "SCHEDULED": 30,
+       "CLOSED": 20
+      },
+      "default": "OPEN",
+      "server_set": true
+     }
+    ]
+   }
+  ]
+ },
+ "infra_spec": {
+  "cloud": "GCP",
+  "region": "us-central1",
+  "tier": "small",
+  "note": "POC runs on local SQLite; GCP mapping is a later step"
+ },
+ "api_spec": {
+  "style": "REST, OpenAPI 3.1",
+  "base_path": "/v1",
+  "auth": "OAuth2 client credentials",
+  "fault_injection": {
+   "error_rate_pct": 1,
+   "latency_p95_ms": 450
+  },
+  "agent_tools": true,
+  "rate_limit_rpm": 1200,
+  "custom_endpoints": [
+   {
+    "method": "POST",
+    "path": "/appointments",
+    "entity": "Appointment",
+    "operation": "create",
+    "summary": "Book an appointment",
+    "verify_member": "member_id",
+    "when": "The member wants to book a visit with a provider on a date and time.",
+    "escalate": [
+     "member asks to override a conflict"
+    ],
+    "never": [
+     "Book for a member who has not been verified"
+    ]
+   },
+   {
+    "method": "GET",
+    "path": "/appointments/{appointment_id}",
+    "entity": "Appointment",
+    "operation": "get",
+    "summary": "Get an appointment",
+    "verify_member": "member_id"
+   },
+   {
+    "method": "GET",
+    "path": "/appointments",
+    "entity": "Appointment",
+    "operation": "list",
+    "summary": "List a member's appointments",
+    "filters": [
+     "member_id",
+     "provider_id",
+     "status",
+     "appointment_date"
+    ],
+    "verify_member": "member_id"
+   },
+   {
+    "method": "PATCH",
+    "path": "/appointments/{appointment_id}",
+    "entity": "Appointment",
+    "operation": "update",
+    "summary": "Cancel or complete an appointment",
+    "updatable": [
+     "status"
+    ],
+    "transitions": {
+     "BOOKED": [
+      "CANCELLED",
+      "COMPLETED"
+     ]
+    },
+    "verify_member": "member_id"
+   },
+   {
+    "method": "GET",
+    "path": "/referrals/{referral_id}",
+    "entity": "Referral",
+    "operation": "get",
+    "summary": "Get a referral"
+   },
+   {
+    "method": "GET",
+    "path": "/referrals",
+    "entity": "Referral",
+    "operation": "list",
+    "summary": "List referrals",
+    "filters": [
+     "member_id",
+     "status",
+     "specialty"
+    ]
+   }
+  ]
+ },
+ "quality_gates": [
+  "Rule pass 100% (R/T/F/C/P/A)",
+  "Privacy scan PASS",
+  "API contract tests PASS",
+  "Agent smoke test PASS"
+ ]
+}
