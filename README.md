@@ -1,19 +1,20 @@
 # Healthcare AI Platform Factory — Data engine + API engine (POC v0.1)
 
-Scope: scenario **S1**, provider-facing, Medicare Advantage. Six use cases built: PCS claim status, PAS authorization status, PEV eligibility, PAP claim appeals, PPI payment inquiry, PON provider onboarding (4 scenarios each, 24 total).
+Scenarios **S1-S4** (blueprints/). Provider use cases: PCS, PAS, PEV, PAP, PPI, PON. Member use cases: MBN, MCI, MPS, MPC, MAS (4 smoke scenarios each, 44 total). Lines of business: Medicare Advantage, Medicaid MCO, Commercial.
+Also: control plane (`hf_factory/control`), ports/profiles (`ports.py`, `profiles.py`; local = SQLite, gcp = stubs only), Dockerfile (not built here), design docs in `docs/`.
 Stubbed upstream: interpreter, blueprint engine (a sample blueprint JSON), orchestrator (`hf_factory/run.py`), infra engine (SQLite instead of AlloyDB/BigQuery/Vector Search).
 
     make install      # pip install -U -r requirements.txt (needs starlette>=0.40 with httpx>=0.28; else: TypeError ... unexpected keyword argument 'app')
     make demo         # 1,000 members, ~2 s:  blueprint -> data (s3-s7) -> API (s8) -> smoke (s10) -> delivery manifest
     make demo-full    # 50,000 members (blueprint scale), ~35 s, ~820k rows
-    make test         # 62 contract tests (12 endpoints) + data tests
+    make test         # 116 tests
     make repro        # replay / re-seed / evolve checks
     make serve        # uvicorn on :8080 (fault injection on); client id hf-demo-client / secret demo-secret-change-me
 
 ## Layout
 - `blueprints/s1_provider_demo.json` stub blueprint (hashes recomputed on load; `--members` patches the scale)
 - `hf_factory/gen/` s3 `ref.py`, s4 `members.py`, s5 `claims_auth.py`, s6 `knowledge.py` (+ `assets.py` index layout)
-- `hf_factory/rules.py` s7: 29 rules (R-01..11 subset, T-01..05/08, F-01..08, P-01/02, A-01, C-03/04); F-07 payee TIN = billing TIN except PPI-04, F-08 recoupment integrity, privacy scan, per-entity checksums, manifest
+- `hf_factory/rules.py` s7: 31 rules (R-01..11 subset, T-01..05/08, F-01..08, P-01/02, A-01, C-03/04); F-07 payee TIN = billing TIN except PPI-04, F-08 recoupment integrity, privacy scan, per-entity checksums, manifest
 - `hf_factory/api/` FastAPI app, models, OpenAPI + tool-manifest builder
 - `hf_factory/smoke.py` 24 scenarios (PCS/PAS/PEV/PAP/PPI/PON x 4); `hf_factory/repro.py` repeatability check
 - `out/<run>/` blueprint, job specs, manifest.json, rule-report.json, openapi.yaml, tools.json, sample_calls.json, s10-smoke.json, delivery.json
@@ -34,7 +35,7 @@ Derived tables (accumulators, care-gap closure, TOC/care cases, OOP-cap pass) ar
 8. API "now" is the simulated clock (= as_of_date), so due dates and hours remaining match the dataset. Document uploads write to a separate state DB, never to the dataset, so checksums stay stable.
 9. Provider use cases added: appeals (`createAppeal`, `getAppealStatus`), payments (`getClaimPayments`, `createPaymentCorrection`), onboarding (`getProviderOnboarding`, `updateLocationAvailability`). Late appeals need a good-cause statement and route to EXCEPTION_REVIEW; no outcome is ever promised. Payee-TIN and recoupment disputes only open a ticket (agents cannot change payees). Mutations (appeals, tickets, availability) go to the state DB, not the dataset.
 10. Recoupments are separate negative `claim_payment` rows (`recoup_flag`, `offset_ref`); `claim_header` totals stay gross-paid, and the API reports gross, recouped and net separately. New denial reason `NETWORK` (CO-242) backs the PON-04 claims-load-lag scenario.
-11. Not yet built: member-facing use cases (MBN, MCI, MPS, MPC, MAS, MPA, MBP, MRX), the other 6 personas' data, Member/Medicaid/Commercial LOBs, replay modes beyond replay/re-seed/evolve, X12/FHIR export, conversation-seed JSONL, Terraform/GCP mapping.
+11. Not yet built: MPA, MBP, MRX, deductibles, specialist-referral rules, sharding and failed-shard retry, X12/FHIR export, conversation-seed JSONL, agentic capability layer, working GCP adapters (AlloyDB, Firestore, Vertex AI Vector Search) and Terraform. The Dockerfile has not been built (no daemon here).
 
 ## Next steps for Claude Code
 1. Add the remaining use cases (data entities are mostly present; add endpoints + scenarios + smoke tests per use case).

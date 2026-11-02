@@ -1,0 +1,1147 @@
+{
+  "info": {
+    "name": "Healthcare AI Factory: Member API (S2/S4)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "description": "Member-facing synthetic API. Stateless: every call carries dob + last_name. Run the folders top to bottom; booking chains through the slot search."
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('access_token') && !pm.request.url.getPath().endsWith('/oauth/token')) {",
+          " pm.sendRequest({ url: pm.variables.replaceIn('{{base_url}}/v1/oauth/token'), method: 'POST', header: { 'Content-Type': 'application/x-www-form-urlencoded' },",
+          "  body: { mode: 'urlencoded', urlencoded: [{ key: 'grant_type', value: 'client_credentials' }, { key: 'client_id', value: pm.variables.replaceIn('{{client_id}}') }, { key: 'client_secret', value: pm.variables.replaceIn('{{client_secret}}') }] } },",
+          "  function (e, r) { if (!e && r.code === 200) pm.collectionVariables.set('access_token', r.json().access_token); }); }"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "client_id",
+      "value": "hf-demo-client"
+    },
+    {
+      "key": "client_secret",
+      "value": "demo-secret-change-me"
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    },
+    {
+      "key": "member_id",
+      "value": "ce692426-6656-5997-b408-f3fa0c5a5958"
+    },
+    {
+      "key": "dob",
+      "value": "2016-08-08"
+    },
+    {
+      "key": "last_name",
+      "value": "Flores"
+    },
+    {
+      "key": "paid_member_id",
+      "value": "3f12b34c-15ca-5259-a454-2c7a7cf6f9b3"
+    },
+    {
+      "key": "paid_dob",
+      "value": "1989-03-27"
+    },
+    {
+      "key": "paid_last_name",
+      "value": "Anderson"
+    },
+    {
+      "key": "paid_claim_id",
+      "value": "4b212008-a549-543c-9ce6-6271ce6dc0c7"
+    },
+    {
+      "key": "denied_member_id",
+      "value": "701b6e5d-f1ba-5332-a677-130662133ed1"
+    },
+    {
+      "key": "denied_dob",
+      "value": "2024-06-02"
+    },
+    {
+      "key": "denied_last_name",
+      "value": "Allen"
+    },
+    {
+      "key": "denied_claim_id",
+      "value": "1e53355e-29a6-5f13-a948-9b2a81ca3f18"
+    },
+    {
+      "key": "pended_member_id",
+      "value": "9820f84b-5565-53e0-b51a-a3e32dab0fa5"
+    },
+    {
+      "key": "pended_dob",
+      "value": "1977-01-01"
+    },
+    {
+      "key": "pended_last_name",
+      "value": "Perez"
+    },
+    {
+      "key": "pended_claim_id",
+      "value": "77b606df-2d1b-5717-a87c-89febad2ed21"
+    },
+    {
+      "key": "cg_member_id",
+      "value": "04551c1c-3f68-5288-8c0f-eec272f3cc5b"
+    },
+    {
+      "key": "cg_dob",
+      "value": "2005-04-20"
+    },
+    {
+      "key": "cg_last_name",
+      "value": "Nguyen"
+    },
+    {
+      "key": "cg_relationship_id",
+      "value": "f7ff5bea-83c5-5420-aad0-b2be824ba8f4"
+    },
+    {
+      "key": "cg_caregiver_name",
+      "value": "Ronald Nguyen"
+    },
+    {
+      "key": "pcp_npi",
+      "value": ""
+    },
+    {
+      "key": "slot_id",
+      "value": ""
+    },
+    {
+      "key": "appointment_id",
+      "value": ""
+    },
+    {
+      "key": "provider_npi",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Auth",
+      "item": [
+        {
+          "name": "Create access token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/oauth/token",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "oauth",
+                "token"
+              ],
+              "query": []
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('token', function () { pm.expect(j.access_token).to.be.a('string'); }); pm.collectionVariables.set('access_token', j.access_token);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MBN Benefits",
+      "item": [
+        {
+          "name": "Plan benefits and accumulators",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/benefits?dob={{dob}}&last_name={{last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "benefits"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('member actor', function () { pm.expect(j.actor.type).to.eql('MEMBER'); });",
+                  "pm.test('oop max present', function () { pm.expect(j.cost_share.oop_max).to.be.above(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Wrong date of birth fails closed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/benefits?dob=1900-01-01&last_name={{last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "benefits"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "1900-01-01"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 403', function () { pm.response.to.have.status(403); });",
+                  "const j = pm.response.json();",
+                  "pm.test('VERIFICATION_FAILED', function () { pm.expect(j.error.code).to.eql('VERIFICATION_FAILED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Caregiver (consented scope)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{cg_member_id}}/benefits?dob={{cg_dob}}&last_name={{cg_last_name}}&relationship_id={{cg_relationship_id}}&caregiver_name={{cg_caregiver_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{cg_member_id}}",
+                "benefits"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{cg_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{cg_last_name}}"
+                },
+                {
+                  "key": "relationship_id",
+                  "value": "{{cg_relationship_id}}"
+                },
+                {
+                  "key": "caregiver_name",
+                  "value": "{{cg_caregiver_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('caregiver actor', function () { pm.expect(j.actor.type).to.eql('CAREGIVER'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MCI Claims",
+      "item": [
+        {
+          "name": "List claims",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/claims?dob={{dob}}&last_name={{last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "claims"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Paid claim (EOB is not a bill)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{paid_member_id}}/claims/{{paid_claim_id}}?dob={{paid_dob}}&last_name={{paid_last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{paid_member_id}}",
+                "claims",
+                "{{paid_claim_id}}"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{paid_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{paid_last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('PAID', function () { pm.expect(j.status).to.eql('PAID'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Denied, provider liable",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{denied_member_id}}/claims/{{denied_claim_id}}?dob={{denied_dob}}&last_name={{denied_last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{denied_member_id}}",
+                "claims",
+                "{{denied_claim_id}}"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{denied_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{denied_last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('not billed', function () { pm.expect(j.denial.you_should_not_be_billed).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pended claim",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{pended_member_id}}/claims/{{pended_claim_id}}?dob={{pended_dob}}&last_name={{pended_last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{pended_member_id}}",
+                "claims",
+                "{{pended_claim_id}}"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{pended_dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{pended_last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('waiting on', function () { pm.expect(j.pend.waiting_on).to.be.ok; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MPS Provider search",
+      "item": [
+        {
+          "name": "Nearest in-network providers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/providers/search?dob={{dob}}&last_name={{last_name}}&max_distance_miles=200&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "providers",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                },
+                {
+                  "key": "max_distance_miles",
+                  "value": "200"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('provider_npi', (j.results[0] || {}).npi || '');",
+                  "pm.test('in network only', function () { pm.expect(j.in_network_only).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Spanish-speaking",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/providers/search?dob={{dob}}&last_name={{last_name}}&language=ES&max_distance_miles=200",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "providers",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                },
+                {
+                  "key": "language",
+                  "value": "ES"
+                },
+                {
+                  "key": "max_distance_miles",
+                  "value": "200"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "No match: say so",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/providers/search?dob={{dob}}&last_name={{last_name}}&specialty=no-such-specialty",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "providers",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                },
+                {
+                  "key": "specialty",
+                  "value": "no-such-specialty"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('count 0', function () { pm.expect(j.count).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MPC PCP",
+      "item": [
+        {
+          "name": "Current PCP",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/pcp?dob={{dob}}&last_name={{last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "pcp"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Find a PCP within 50 miles",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/providers/search?dob={{dob}}&last_name={{last_name}}&provider_type=PCP&max_distance_miles=49&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "providers",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                },
+                {
+                  "key": "provider_type",
+                  "value": "PCP"
+                },
+                {
+                  "key": "max_distance_miles",
+                  "value": "49"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('pcp_npi', (j.results.find(r => r.panel_status !== 'CLOSED') || {}).npi || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change PCP: dry run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/pcp-changes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "pcp-changes"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dob\": \"{{dob}}\",\n  \"last_name\": \"{{last_name}}\",\n  \"new_pcp_npi\": \"{{pcp_npi}}\",\n  \"dry_run\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test('PREVIEW', function () { pm.expect(j.status).to.eql('PREVIEW'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change PCP: confirm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/pcp-changes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "pcp-changes"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dob\": \"{{dob}}\",\n  \"last_name\": \"{{last_name}}\",\n  \"new_pcp_npi\": \"{{pcp_npi}}\",\n  \"reason\": \"Closer to home\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.test('SCHEDULED', function () { pm.expect(j.status).to.eql('SCHEDULED'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "MAS Appointments",
+      "item": [
+        {
+          "name": "Find a provider",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/providers/search?dob={{dob}}&last_name={{last_name}}&max_distance_miles=200&limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "providers",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                },
+                {
+                  "key": "max_distance_miles",
+                  "value": "200"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('provider_npi', (j.results[0] || {}).npi || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Open slots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/appointment-slots?dob={{dob}}&last_name={{last_name}}&npi={{provider_npi}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "appointment-slots"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                },
+                {
+                  "key": "npi",
+                  "value": "{{provider_npi}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('slot_id', (j.slots.find(s => s.start > '2026-10-14T12:00:00') || {}).slot_id || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Book: dry run",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "appointments"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dob\": \"{{dob}}\",\n  \"last_name\": \"{{last_name}}\",\n  \"slot_id\": \"{{slot_id}}\",\n  \"dry_run\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Book",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/appointments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "appointments"
+              ],
+              "query": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dob\": \"{{dob}}\",\n  \"last_name\": \"{{last_name}}\",\n  \"slot_id\": \"{{slot_id}}\",\n  \"reason\": \"Annual wellness visit\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 201', function () { pm.response.to.have.status(201); });",
+                  "const j = pm.response.json();",
+                  "pm.collectionVariables.set('appointment_id', j.appointment.appointment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List appointments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/appointments?dob={{dob}}&last_name={{last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "appointments"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel (outside 24h)",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/v1/members/{{member_id}}/appointments/{{appointment_id}}?dob={{dob}}&last_name={{last_name}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "v1",
+                "members",
+                "{{member_id}}",
+                "appointments",
+                "{{appointment_id}}"
+              ],
+              "query": [
+                {
+                  "key": "dob",
+                  "value": "{{dob}}"
+                },
+                {
+                  "key": "last_name",
+                  "value": "{{last_name}}"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status is 200', function () { pm.response.to.have.status(200); });",
+                  "const j = pm.response.json();",
+                  "pm.test('slot released', function () { pm.expect(j.slot_released).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

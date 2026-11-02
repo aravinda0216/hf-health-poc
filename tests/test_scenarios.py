@@ -37,3 +37,11 @@ def test_deterministic(tmp_path):
     (tmp_path / "a").mkdir(); (tmp_path / "b").mkdir()
     r1, _ = build("s2_medicaid_member.json", tmp_path / "a", 500); r2, _ = build("s2_medicaid_member.json", tmp_path / "b", 500)
     assert r1["total_rows"] == r2["total_rows"]
+
+
+def test_profiles():
+    from hf_factory import profiles
+    assert profiles.dataset_store("x.db", "local").path == "x.db"
+    with pytest.raises(ValueError): profiles.state_store("x", "nope")
+    from hf_factory.adapters.gcp_store import NotImplementedOnGcp
+    with pytest.raises(NotImplementedOnGcp): profiles.dataset_store("x", "gcp").connect_ro()

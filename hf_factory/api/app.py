@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from datetime import datetime, timedelta, date
 from typing import Optional
 
+from .. import profiles
 from fastapi import APIRouter, Depends, FastAPI, Form, Query, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.openapi.models import OAuthFlows as OAuthFlowsModel
@@ -53,15 +54,18 @@ def create_app(cfg: Config) -> FastAPI:
                   description="Synthetic provider-facing API (claim status, authorization status, eligibility) for voice and chat agent testing. All data is synthetic.")
     local = threading.local(); lock = threading.Lock()
     state_path = cfg.state_path or (cfg.db_path + ".state")
+    STATE = profiles.state_store(state_path)
     # Read-only connection to the dataset (one per thread). The API can never modify generated data, so dataset checksums stay valid.
+    # Storage comes from the active profile (HF_PROFILE, default local = SQLite); see hf_factory/ports.py.
+    DATASET = profiles.dataset_store(cfg.db_path)
     def con_ro():
         c = getattr(local, "c", None)
         if c is None:
-            c = sqlite3.connect(f"file:{cfg.db_path}?mode=ro", uri=True, check_same_thread=False); c.row_factory = sqlite3.Row; local.c = c
+            c = DATASET.connect_ro(); local.c = c
         return c
     # Separate writable database for things callers create (uploads, appeals, tickets, availability). Tables are created on first use.
     def state():
-        c = sqlite3.connect(state_path, check_same_thread=False); c.row_factory = sqlite3.Row
+        c = STATE.connect()
         c.execute("CREATE TABLE IF NOT EXISTS doc_uploads (upload_id TEXT PRIMARY KEY, auth_id TEXT, doc_type TEXT, file_name TEXT, size_bytes INTEGER, sha256 TEXT, npi TEXT, uploaded_at TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS appeals (appeal_id TEXT PRIMARY KEY, claim_id TEXT UNIQUE, level TEXT, reason TEXT, filed_dt TEXT, deadline_dt TEXT, late INTEGER, good_cause TEXT, documents TEXT, npi TEXT)")
         c.execute("CREATE TABLE IF NOT EXISTS payment_tickets (ticket_id TEXT PRIMARY KEY, claim_id TEXT, issue_type TEXT, description TEXT, npi TEXT, opened_dt TEXT)")
