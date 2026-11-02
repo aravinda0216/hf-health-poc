@@ -379,11 +379,18 @@ def create_app(cfg: Config) -> FastAPI:
         for _, t in docs:
             for w in set(t): df[w] = df.get(w, 0) + 1
         idx.update(docs=docs, df=df, N=len(docs), links=links, avg=sum(len(t) for _, t in docs) / max(1, len(docs)))
+    SCORE_MIN = float(os.environ.get('HF_KB_SCORE_MIN', '2.0'))  # minimum BM25-style score to answer
+    COVERAGE_MIN = float(os.environ.get('HF_KB_COVERAGE_MIN', '0.4'))  # minimum idf-weighted query coverage to answer
     # Common words ignored when scoring.
-    STOP = set("the a an and or of to in is it for on with how do i what does my this that are be can we you your".split())
+    STOP = set("the a an and or of to in is it for on with how do i what does my this that are be can we you your will which who when where why long much many from by if as was were been has have there their".split())
     def _tok(s):
         import re
-        return [w for w in re.findall(r"[a-z0-9\-]+", s.lower()) if w not in STOP]
+        # Light stemming (plural / -ing / -ed) so "appeals" matches "appeal" and "denied" matches "denial" roots.
+        def stem(w):
+            for suf in ("ing", "ed", "es", "s"):
+                if w.endswith(suf) and len(w) - len(suf) >= 4: return w[:-len(suf)]
+            return w
+        return [stem(w) for w in re.findall(r"[a-z0-9\-]+", s.lower()) if w not in STOP]
     @router.get("/knowledge/search", response_model=M.KnowledgeResponse, dependencies=prot, tags=["common"], operation_id="searchKnowledge", responses=ERR,
                 summary="Search approved, active knowledge assets (grounding + citations)",
                 openapi_extra=GUARD({"when": "Needed to ground an explanation (denial codes, policies, procedures). Cite the returned source.", "never": ["Answer from memory when abstain is true"]}))
@@ -392,6 +399,9 @@ def create_app(cfg: Config) -> FastAPI:
     def search(q: str = Query(..., min_length=2, max_length=300), audience: str = Query("PROVIDER", pattern="^(PROVIDER|MEMBER|INTERNAL)$"), use_case: Optional[str] = Query(None, max_length=10), top_k: int = Query(3, ge=1, le=10)):
         if not idx: build_index()
         qt = _tok(q); scored = []
+        def idf_of(w):
+            d = idx["df"].get(w, 0)
+            return math.log(1 + (idx["N"] - d + .5) / (d + .5))
         for r, t in idx["docs"]:
             if r["audience"] != audience: continue
             if use_case and use_case not in idx["links"].get(r["asset_id"], set()): continue
@@ -403,10 +413,14 @@ def create_app(cfg: Config) -> FastAPI:
                     idf = math.log(1 + (idx["N"] - idx["df"][w] + .5) / (idx["df"][w] + .5)); f = tf[w]
                     s += idf * (f * 2.2) / (f + 1.2 * (.25 + .75 * len(t) / idx["avg"]))
             hit = sum(1 for w in set(qt) if w in tf)
-            if s > 0: scored.append((s * (hit / max(1, len(set(qt))) ** 0.5), r))
+            # idf-weighted coverage: the share of the query's information (rare words count more) that this chunk actually contains.
+            # A query word the corpus has never seen gets the maximum idf, so off-topic words ("competitor", "weather") pull coverage down.
+            cov = sum(idf_of(w) for w in set(qt) if w in tf) / max(1e-9, sum(idf_of(w) for w in set(qt)))
+            if s > 0: scored.append((s * (hit / max(1, len(set(qt))) ** 0.5), r, cov))
         scored.sort(key=lambda x: -x[0]); top = scored[:top_k]
-        abstain = (not top) or top[0][0] < 2.0
-        hits = [M.KnowledgeHit(chunk_id=r["chunk_id"], asset_id=r["asset_id"], asset_title=r["title"], asset_type=r["asset_type"], version=r["version"], section_path=r["section_path"], text=r["text"], score=round(s, 3)) for s, r in top]
+        # Abstain when nothing scores, the best score is weak, or the best chunk covers too little of what was asked (stops partial-word matches from answering off-topic questions).
+        abstain = (not top) or top[0][0] < SCORE_MIN or top[0][2] < COVERAGE_MIN
+        hits = [M.KnowledgeHit(chunk_id=r["chunk_id"], asset_id=r["asset_id"], asset_title=r["title"], asset_type=r["asset_type"], version=r["version"], section_path=r["section_path"], text=r["text"], score=round(s, 3)) for s, r, _c in top]
         return M.KnowledgeResponse(query=q, abstain=abstain, results=([] if abstain else hits), note=("Confidence below threshold: do not answer from memory; abstain or escalate." if abstain else None))
 
     # The appeals, payments and onboarding endpoints live in provider_ext.py; they share this module's helpers through a small namespace.

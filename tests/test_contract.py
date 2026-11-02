@@ -100,3 +100,13 @@ def test_knowledge_returns_only_active_provider_assets(client, hdr, con):
     j = client.get("/v1/knowledge/search", params={"q": "prior authorization timelines urgent standard", "top_k": 10}, headers=hdr).json()
     ids = {r["asset_id"] for r in j["results"]}; st = {r[0] for r in con.execute(f"SELECT status FROM knowledge_asset WHERE asset_id IN ({','.join('?'*len(ids))})", list(ids))} if ids else set()
     assert j["results"] and st == {"ACTIVE"} and all("Evidence of Coverage" not in r["asset_title"] for r in j["results"])
+
+# Every seeded UNANSWERABLE golden question must abstain; most EASY ones must be answered (regression guard for the abstain threshold).
+def test_knowledge_golden_abstain_and_recall(client, hdr, con):
+    n_un = ok_un = n_ez = ok_ez = 0
+    for uc, q, d in con.execute("SELECT use_case_code, question, difficulty FROM qa_golden WHERE difficulty IN ('UNANSWERABLE','EASY')").fetchall():
+        a = client.get("/v1/knowledge/search", params={"q": q, "use_case": uc}, headers=hdr).json()["abstain"]
+        if d == "UNANSWERABLE": n_un += 1; ok_un += a
+        else: n_ez += 1; ok_ez += (not a)
+    assert ok_un == n_un, f"{n_un-ok_un} unanswerable questions were answered"
+    assert ok_ez / n_ez >= 0.85, f"easy-question recall {ok_ez}/{n_ez}"
