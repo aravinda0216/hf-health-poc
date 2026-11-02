@@ -19,7 +19,7 @@ from .store import Store, now
 PREV = {"s3": None, "s4": "s3", "s5": "s4", "s6": "s5", "s7": "s6"}
 STAGE_RULES = {"s3": ["R-04", "F-04", "P-02"], "s4": ["R-02", "R-05", "R-06", "T-01"], "s5": ["R-03", "R-07", "F-01", "F-02", "F-05", "T-02", "T-03", "T-04"], "s6": ["R-09", "R-10", "R-11", "T-08"]}
 STAGE_TABLES = {
-    "s3": ["plan", "provider", "practice_location", "network_participation", "ref_code"],
+    "s3": ["plan", "provider", "practice_location", "appointment_slot", "network_participation", "ref_code"],
     "s4": ["member_demographics", "plan_enrollment", "pcp_assignment", "family_relationship", "member_accumulator", "risk_score", "care_gap", "sdoh_indicator"],
     "s5": ["auth_request", "auth_line", "auth_determination", "clinical_review_queue", "documentation_requirement", "claim_header", "claim_line", "claim_payment", "claim_denial", "claim_pend", "claim_adjustment", "appeal_record", "reprocessing_history", "pharmacy_claim_detail"],
     "s6": ["care_case", "transition_of_care", "knowledge_asset", "asset_chunk", "asset_link", "faq_entry", "agent_sop", "qa_golden"]}

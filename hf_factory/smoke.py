@@ -1,5 +1,5 @@
-"""Stage s10 stub: replay the 24 provider scenarios (PCS/PAS/PEV/PAP/PPI/PON x 4) against the API and check the expected behaviour."""
-import json, sqlite3, tempfile, time, warnings
+"""Stage s10 stub: replay the seeded scenarios (4 per use case: PCS/PAS/PEV/PAP/PPI/PON provider side, MBN/MCI/MPS/MPC/MAS member side) against the API and check the expected behaviour."""
+import json, sqlite3, tempfile, time, types, warnings
 warnings.filterwarnings("ignore")
 from fastapi.testclient import TestClient
 from .api.app import create_app, Config
@@ -9,8 +9,10 @@ THRESH = dict(grounded_pct_min=95, escalation_correct_pct_min=95, p95_latency_ms
 
 # Replays every seeded scenario through the real API (in process) and checks the behaviour a good agent would rely on.
 # Returns per-use-case results; the orchestrator treats the run as failed unless every scenario passes and the thresholds are met.
-def run(db_path, log=print):
-    app = create_app(Config(db_path=db_path, state_path=tempfile.mktemp(), fault_enabled=False)); c = TestClient(app)
+def run(db_path, log=print, use_cases=None):
+    # use_cases limits which use cases' scenarios are replayed (the blueprint's scope); None replays every one.
+    from .api import catalog
+    app = create_app(Config(db_path=db_path, state_path=tempfile.mktemp(), fault_enabled=False, enabled_ops=(catalog.ops_for(use_cases) if use_cases else None))); c = TestClient(app)
     tok = c.post("/v1/oauth/token", data={"grant_type": "client_credentials", "client_id": "hf-demo-client", "client_secret": "demo-secret-change-me"}).json()["access_token"]
     H = {"Authorization": "Bearer " + tok}
     # Scenario rows are looked up by scenario_id in the dataset, so the tests work at any scale.
@@ -131,6 +133,9 @@ def run(db_path, log=print):
     @sc("PON-04", "Live but claims deny out of network")
     def _():
         _n, j = onb("PON-04"); k = j["claims_load_check"]; return k["lag_suspected"] and k["affected_claims"] >= 2 and k["escalation_queue"] == "NETWORK_OPERATIONS" and "Do not resubmit" in k["recommended_action"], bool(j["sources"]), j["escalation_recommended"]
+    from . import smoke_member
+    smoke_member.add(sc, types.SimpleNamespace(call=call, q=q, db=db))
+    if use_cases: S[:] = [x for x in S if x[0][:3] in use_cases]
     # Run all checks. An exception counts as a failure, not a crash. Then compute grounded %, escalation-correct % and p95 latency per use case.
     res, by = [], {}
     for code, name, f in S:

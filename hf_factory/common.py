@@ -9,7 +9,7 @@ import hashlib, json, random, uuid
 from datetime import date, datetime, timedelta
 
 # Version stamps. They feed data_spec_hash, so bumping any of them intentionally changes the dataset fingerprint.
-GEN_VERSION = "0.1.0"
+GEN_VERSION = "0.2.0"
 CATALOG_VERSION = "2.4.0"
 RULESET_VERSION = "1.8.0"
 # Row hashes are summed modulo 2**64, which makes the per-entity checksum independent of row order.

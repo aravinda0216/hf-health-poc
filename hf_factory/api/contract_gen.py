@@ -35,7 +35,30 @@ def provider_samples(con):
     S["updateLocationAvailability"] = dict(method="PUT", path=f"/v1/providers/{n}/locations/{loc}/availability", json={"tin": tin(n), "accepting_new_patients": True, "schedule": [{"day": "MON", "open": "08:00", "close": "17:00"}]}, bad=dict(json={"tin": tin(n)}), ok=200)
     return S
 
-SAMPLE_BUILDERS = [provider_samples]   # member_samples is appended by api/member_contract.py when the member use cases are present
+def member_samples(con):
+    one = lambda sql, *a: con.execute(sql, a).fetchone()
+    m = one("SELECT m.* FROM member_demographics m JOIN plan_enrollment e ON e.member_id=m.member_id AND e.effective_dt>='2026-01-01' AND e.status='ACTIVE' WHERE m.scenario_id='BASE' ORDER BY m.row_idx LIMIT 1")
+    mid = m["member_id"]; F = {"dob": m["dob"], "last_name": m["last_name"]}; base = f"/v1/members/{mid}"
+    cm = one("SELECT m.*, h.claim_id FROM claim_header h JOIN member_demographics m ON m.member_id=h.member_id WHERE h.status='PAID' ORDER BY h.row_idx LIMIT 1"); CF = {"dob": cm["dob"], "last_name": cm["last_name"]}
+    plan = one("SELECT plan_id FROM plan_enrollment WHERE member_id=? AND effective_dt>='2026-01-01'", mid)[0]
+    pcp = one("SELECT pv.npi FROM provider pv JOIN network_participation np ON np.npi=pv.npi AND np.plan_id=? AND np.status='PARTICIPATING' AND np.panel_status='OPEN' JOIN practice_location l ON l.npi=pv.npi "
+              "WHERE pv.provider_type='PCP' AND pv.status='ACTIVE' AND pv.npi NOT IN (SELECT pcp_npi FROM pcp_assignment WHERE member_id=? AND status='ACTIVE') AND ((l.lat-?)*(l.lat-?)*4761+(l.lon-?)*(l.lon-?)*3600)<2000 ORDER BY pv.npi LIMIT 1", plan, mid, m["lat"], m["lat"], m["lon"], m["lon"])
+    sl = one("SELECT s.* FROM appointment_slot s JOIN network_participation np ON np.npi=s.npi AND np.plan_id=? AND np.status='PARTICIPATING' WHERE s.slot_start>'2026-10-14T12:00:00' ORDER BY s.slot_start LIMIT 1", plan)
+    S = {}
+    S["getMemberBenefits"] = dict(method="GET", path=f"{base}/benefits", params=F, bad=dict(params={}), ok=200)
+    S["listMemberClaims"] = dict(method="GET", path=f"/v1/members/{cm['member_id']}/claims", params=CF, bad=dict(params={}), ok=200)
+    S["getMemberClaim"] = dict(method="GET", path=f"/v1/members/{cm['member_id']}/claims/{cm['claim_id']}", params=CF, bad=dict(params={}), ok=200)
+    S["searchProviders"] = dict(method="GET", path=f"{base}/providers/search", params={**F, "max_distance_miles": 200}, bad=dict(params={**F, "limit": 0}), ok=200)
+    S["getMemberPcp"] = dict(method="GET", path=f"{base}/pcp", params=F, bad=dict(params={}), ok=200)
+    if pcp: S["changePcp"] = dict(method="POST", path=f"{base}/pcp-changes", json={**F, "new_pcp_npi": pcp[0]}, bad=dict(json={**F, "new_pcp_npi": "12"}), ok=201)
+    if sl:
+        S["getAppointmentSlots"] = dict(method="GET", path=f"{base}/appointment-slots", params={**F, "npi": sl["npi"]}, bad=dict(params={**F, "npi": "12"}), ok=200)
+        S["bookAppointment"] = dict(method="POST", path=f"{base}/appointments", json={**F, "slot_id": sl["slot_id"]}, bad=dict(json=F), ok=201)
+    S["listMemberAppointments"] = dict(method="GET", path=f"{base}/appointments", params=F, bad=dict(params={}), ok=200)
+    S["cancelAppointment"] = dict(method="DELETE", path=f"{base}/appointments/APT-00000000", params={**F, "dry_run": "true"}, bad=dict(params={}), ok=404)
+    return S
+
+SAMPLE_BUILDERS = [provider_samples, member_samples]
 
 def _error_ok(r):
     j = r.json()
@@ -43,7 +66,7 @@ def _error_ok(r):
 
 def run(db_path, spec, tools, enabled_ops, log=print):
     """Run the four generated checks for every enabled business operation. Returns {total, passed, failed, failures[], per_operation{}}."""
-    con = sqlite3.connect(db_path); S = {}
+    con = sqlite3.connect(db_path); con.row_factory = sqlite3.Row; S = {}
     for b in SAMPLE_BUILDERS: S.update(b(con))
     # Isolated app + state DB so write endpoints do not touch any other state; fault injection off so results are deterministic.
     cl = TestClient(A.create_app(A.Config(db_path=db_path, state_path=tempfile.mktemp(), fault_enabled=False, enabled_ops=set(enabled_ops))))

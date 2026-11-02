@@ -6,12 +6,12 @@
   "note": "STUB: normally emitted by the Blueprint Engine. Scenario S1 from the architecture document.",
   "repeatability": {
     "root_seed": 20261012, "as_of_date": "2026-10-12", "catalog_version": "2.4.0", "rule_set_version": "1.8.0",
-    "generator_version": "0.1.0", "id_strategy": "UUIDv5(dataset_id, entity, seed, row_index)",
+    "generator_version": "0.2.0", "id_strategy": "UUIDv5(dataset_id, entity, seed, row_index)",
     "llm": {"mode": "templated", "note": "v1 uses templated text; LLM + content-addressed cache is a later step"}
   },
   "tenant": {"id": "ma-demo-01", "env": "demo", "ttl_hours": 336},
   "scope": {
-    "use_cases": ["PCS", "PAS", "PEV"],
+    "use_cases": ["PCS", "PAS", "PEV", "PAP", "PPI", "PON"],
     "personas": ["BILLING", "REFERRAL", "OFFICE"],
     "channels": ["voice", "chat"],
     "domains": {"primary": ["C", "A", "M", "K"], "supporting": ["P", "CM"]}

@@ -162,6 +162,20 @@ def build_rules(con, ctx, vol):
          q1(con, "SELECT COUNT(*) FROM auth_determination WHERE outcome='DENIED' AND (denial_rationale IS NULL OR appeal_rights_sent_dt IS NULL)") + q1(con, "SELECT COUNT(*) FROM claim_denial WHERE reason_text IS NULL"))
     rule("C-04", "Emergency claims are never denied for authorization", q1(con, "SELECT COUNT(*) FROM claim_header WHERE is_emergency=1"),
          q1(con, "SELECT COUNT(*) FROM claim_header h JOIN claim_denial d ON d.claim_id=h.claim_id WHERE h.is_emergency=1 AND d.denial_category='AUTH'"))
+    # M-01 (MAS): appointment slots belong to a location of the same provider, start after the as-of date, on a weekday, and only active PCPs/specialists offer them.
+    asof = ctx.d(0)
+    rule("M-01", "Appointment slots: location belongs to the same provider, future weekday start, active PCP or specialist",
+         q1(con, "SELECT COUNT(*) FROM appointment_slot"),
+         q1(con, "SELECT COUNT(*) FROM appointment_slot s LEFT JOIN practice_location l ON l.location_id=s.location_id WHERE l.npi IS NULL OR l.npi!=s.npi")
+         + q1(con, "SELECT COUNT(*) FROM appointment_slot WHERE substr(slot_start,1,10)<=?", asof)
+         + q1(con, "SELECT COUNT(*) FROM appointment_slot WHERE CAST(strftime('%w', substr(slot_start,1,10)) AS INTEGER) IN (0,6)")
+         + q1(con, "SELECT COUNT(*) FROM appointment_slot s JOIN provider p ON p.npi=s.npi WHERE p.status!='ACTIVE' OR p.provider_type NOT IN ('PCP','SPECIALIST')"))
+    # M-02 (MCI/MBN): every plan has a MEMBER-audience benefit document and every member use case has an SOP and FAQ library (member answers must be grounded).
+    rule("M-02", "Member use cases (MBN, MCI, MPS, MPC, MAS) each have an active SOP and FAQ library; every plan has an active benefit document",
+         9 + q1(con, "SELECT COUNT(*) FROM plan"),
+         sum(1 for u in ("MBN", "MCI", "MPS", "MPC", "MAS") for t in ("AGENT_SOP", "FAQ_LIBRARY")
+             if q1(con, "SELECT COUNT(*) FROM asset_link l JOIN knowledge_asset a ON a.asset_id=l.asset_id WHERE l.linked_entity='USE_CASE' AND l.linked_key=? AND a.asset_type=? AND a.status='ACTIVE'", u, t) == 0)
+         + q1(con, "SELECT COUNT(*) FROM plan p WHERE NOT EXISTS (SELECT 1 FROM knowledge_asset a WHERE a.asset_type='BENEFIT_DOC' AND a.plan_id=p.plan_id AND a.status='ACTIVE')"))
     return out
 
 # Aggregate privacy checks: no near-duplicate people, and a count of small quasi-identifier groups (<11) for the report.

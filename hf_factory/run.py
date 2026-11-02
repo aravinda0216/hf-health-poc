@@ -3,7 +3,7 @@ Real orchestrator, interpreter, blueprint engine and infra engine (s1, s2, s9) a
 import argparse, json, os, sqlite3, tempfile, time, warnings
 warnings.filterwarnings("ignore")
 from . import blueprint, data_engine, smoke
-from .api import app as api_app, build as api_build
+from .api import app as api_app, build as api_build, catalog, contract_gen
 
 def main(argv=None):
     ap = argparse.ArgumentParser()
@@ -27,14 +27,15 @@ def main(argv=None):
     log("[api engine] s8")
     # API engine (s8). Fault injection and rate limit come from the blueprint's api_spec, so the same blueprint gives the same behaviour.
     cfg = api_app.Config(db_path=db, state_path=f"{a.out}/api-state.db", audit_path=f"{a.out}/audit.jsonl", fault_enabled=True,
-                         fault_error_pct=bp["api_spec"]["fault_injection"]["error_rate_pct"], fault_latency_p95_ms=bp["api_spec"]["fault_injection"]["latency_p95_ms"], rate_limit_rpm=bp["api_spec"]["rate_limit_rpm"])
+                         fault_error_pct=bp["api_spec"]["fault_injection"]["error_rate_pct"], fault_latency_p95_ms=bp["api_spec"]["fault_injection"]["latency_p95_ms"], rate_limit_rpm=bp["api_spec"]["rate_limit_rpm"], enabled_ops=catalog.ops_for(bp["scope"]["use_cases"]))
     app = api_app.create_app(cfg); spec, tm = api_build.write_artifacts(app, f"{a.out}/api")
     n_ep = sum(1 for p in spec["paths"].values() for op in p.values() if op["operationId"] != "createAccessToken")
     # Contract tests run against the generated database; any failure aborts the run.
     ct = {"total": 0, "passed": 0, "failed": 0}
-    if not a.skip_tests: ct = api_build.run_contract_tests(db)
+    # Contract tests are generated from the spec (4 per endpoint), as the architecture document specifies; the hand-written suite runs under `make test`.
+    if not a.skip_tests: ct = contract_gen.run(db, spec, tm, catalog.ops_for(bp["scope"]["use_cases"]))
     log(f"  -> {n_ep} business endpoints, {len(tm['tools'])} agent tools, contract tests {ct['passed']}/{ct['total']}")
-    if ct["failed"]: raise SystemExit("contract tests FAILED\n" + ct["output"])
+    if ct["failed"]: raise SystemExit("contract tests FAILED\n" + "\n".join(ct["failures"]))
     # Capture one real request/response per use case from the dataset, to ship as documentation for agent builders.
     # sample calls (one per use case) captured from real data
     from fastapi.testclient import TestClient
@@ -51,7 +52,7 @@ def main(argv=None):
               fault_injection=bp["api_spec"]["fault_injection"], run=f"HF_DB={db} uvicorn hf_factory.api.app:from_env --factory --port 8080")
     json.dump(s8, open(f"{a.out}/s8-api.json", "w"), indent=1)
     # s10: the agent smoke gate replays every scenario through the API; the run is only READY if it passes.
-    log("[smoke test] s10"); sm = smoke.run(db, log=lambda s: log(s)); json.dump(sm, open(f"{a.out}/s10-smoke.json", "w"), indent=1)
+    log("[smoke test] s10"); sm = smoke.run(db, log=lambda s: log(s), use_cases=bp["scope"]["use_cases"]); json.dump(sm, open(f"{a.out}/s10-smoke.json", "w"), indent=1)
     log(f"  -> {sm['gate']}")
     if sm["status"] != "PASS": raise SystemExit("agent_smoke_gate FAILED")
     # s11 stand-in: the delivery manifest is what the orchestrator would pass back to the customer environment.

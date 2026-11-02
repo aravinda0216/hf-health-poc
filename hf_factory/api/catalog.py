@@ -4,7 +4,7 @@ operations the deployed backend exposes (the "generic backend switched on by the
 # Operations every deployment exposes regardless of use case.
 COMMON_OPS = {"createAccessToken", "verifyIdentity", "searchKnowledge"}
 
-# use case -> operationIds. Member-facing operations are added below (phase C).
+# use case -> operationIds.
 USE_CASE_OPS = {
     "PCS": {"getClaimStatus"},
     "PAS": {"getAuthorizationStatus", "submitAuthorizationDocument"},
@@ -12,6 +12,12 @@ USE_CASE_OPS = {
     "PAP": {"createAppeal", "getAppealStatus"},
     "PPI": {"getClaimPayments", "createPaymentCorrection"},
     "PON": {"getProviderOnboarding", "updateLocationAvailability"},
+    # Member-facing use cases.
+    "MBN": {"getMemberBenefits"},
+    "MCI": {"listMemberClaims", "getMemberClaim"},
+    "MPS": {"searchProviders"},
+    "MPC": {"getMemberPcp", "changePcp"},
+    "MAS": {"getAppointmentSlots", "bookAppointment", "listMemberAppointments", "cancelAppointment"},
 }
 
 def ops_for(use_cases):

@@ -1,4 +1,4 @@
-"""SQLite schema for the S1 entity set (34 entities + reference table), derived from the Healthcare AI Platform Factory blueprint.
+"""SQLite schema for the S1 entity set (35 entities + reference table), derived from the Healthcare AI Platform Factory blueprint.
 Column DSL:  name:T  where T = T text | I int | R real | B bool(int) | J json(text).  Every table also gets
 row_idx, scenario_id, tenant_id, is_synthetic (P-01)."""
 import json, sqlite3
@@ -27,6 +27,7 @@ TABLES = {
 "provider": _t("P","npi","npi:T provider_type:T entity_type:T first_name:T last_name:T org_name:T taxonomy_code:T specialty:T facility_type:T languages:J gender:T tin:T status:T"),
 "network_participation": _t("P","participation_id","participation_id:T npi:T plan_id:T status:T tier:T effective_dt:T term_dt:T panel_status:T onboarding_stage:T pending_items:J onboarding_started_dt:T expected_live_dt:T"),
 "practice_location": _t("P","location_id","location_id:T npi:T address:T city:T state:T zip:T lat:R lon:R phone:T accepting_new_patients:B accessibility:J telehealth:B last_verified_dt:T availability_loaded:B added_dt:T"),
+"appointment_slot": _t("P","slot_id","slot_id:T npi:T location_id:T slot_start:T duration_min:I visit_type:T status:T"),
 # ---- Claims (primary) ----
 "claim_header": _t("C","claim_id","claim_id:T claim_type:T member_id:T plan_id:T billing_npi:T rendering_npi:T facility_npi:T claim_frequency_code:T original_claim_id:T service_from_dt:T service_to_dt:T received_dt:T adjudicated_dt:T paid_dt:T status:T network_status:T is_emergency:B auth_id:T bill_type:T drg_code:T total_billed:R total_allowed:R total_paid:R member_resp:R"),
 "claim_line": _t("C","line_id","line_id:T claim_id:T line_no:I cpt_hcpcs:T revenue_code:T modifier:T rendering_npi:T units:I billed:R allowed:R paid:R deductible:R copay:R coinsurance:R line_status:T"),
@@ -65,7 +66,7 @@ FKS = {
  "member_accumulator.member_id":"member_demographics.member_id","pcp_assignment.member_id":"member_demographics.member_id","pcp_assignment.pcp_npi":"provider.npi",
  "risk_score.member_id":"member_demographics.member_id","care_gap.member_id":"member_demographics.member_id","care_gap.closed_by_claim_id":"claim_header.claim_id",
  "sdoh_indicator.member_id":"member_demographics.member_id",
- "network_participation.npi":"provider.npi","network_participation.plan_id":"plan.plan_id","practice_location.npi":"provider.npi",
+ "network_participation.npi":"provider.npi","network_participation.plan_id":"plan.plan_id","practice_location.npi":"provider.npi","appointment_slot.npi":"provider.npi","appointment_slot.location_id":"practice_location.location_id",
  "claim_header.member_id":"member_demographics.member_id","claim_header.plan_id":"plan.plan_id","claim_header.billing_npi":"provider.npi",
  "claim_header.rendering_npi":"provider.npi","claim_header.facility_npi":"provider.npi","claim_header.original_claim_id":"claim_header.claim_id","claim_header.auth_id":"auth_request.auth_id",
  "claim_line.claim_id":"claim_header.claim_id","claim_line.rendering_npi":"provider.npi","pharmacy_claim_detail.claim_id":"claim_header.claim_id","pharmacy_claim_detail.pharmacy_npi":"provider.npi",
@@ -82,10 +83,10 @@ FKS = {
 
 # entities whose rows are derived from other tables (not prefix-stable on 'evolve')
 # Tables computed from other tables (accumulators, care gaps, cases). They are excluded from the evolve prefix check because they change when members/claims are added.
-DERIVED = {"member_accumulator","care_gap","care_case","transition_of_care","ref_code"}
+DERIVED = {"appointment_slot","member_accumulator","care_gap","care_case","transition_of_care","ref_code"}
 # generation order (R-01)
 # Generation order: parents before children, so foreign keys (rule R-01) can always be satisfied.
-ORDER = ["ref_code","plan","provider","network_participation","practice_location","member_demographics","family_relationship","plan_enrollment","pcp_assignment","risk_score","care_gap","sdoh_indicator",
+ORDER = ["ref_code","plan","provider","network_participation","practice_location","appointment_slot","member_demographics","family_relationship","plan_enrollment","pcp_assignment","risk_score","care_gap","sdoh_indicator",
  "auth_request","auth_line","auth_determination","clinical_review_queue","documentation_requirement",
  "claim_header","claim_line","pharmacy_claim_detail","claim_denial","claim_pend","claim_adjustment","claim_payment","appeal_record","reprocessing_history","member_accumulator",
  "care_case","transition_of_care","knowledge_asset","asset_chunk","faq_entry","agent_sop","asset_link","qa_golden"]

@@ -150,3 +150,17 @@ def test_availability_other_providers_location_404(fresh, con, tin):
     assert c.put(f"/v1/providers/{o[0]}/locations/{loc}/availability", json={"tin": o[1], "accepting_new_patients": True, "schedule": SCHED}, headers=H).status_code == 404
 def test_availability_wrong_tin_403(fresh, con):
     c, H = fresh; n, loc = gap_loc(con); assert c.put(f"/v1/providers/{n}/locations/{loc}/availability", json={"tin": "99-0000000", "accepting_new_patients": True, "schedule": SCHED}, headers=H).status_code == 403
+
+# ---------------------------------------------------------------- dry_run on provider writes: full validation, nothing saved
+def test_dry_run_appeal_saves_nothing(fresh, con, tin):
+    c, H = fresh; x = claim(con, "PAP-01"); b = body(x[1], tin(x[1]))
+    r = c.post(f"/v1/claims/{x[0]}/appeals?dry_run=true", json=b, headers=H); assert r.status_code == 201 and r.json()["dry_run"] is True
+    aid = r.json()["appeal_id"]; assert c.get(f"/v1/appeals/{aid}", params={"npi": x[1], "tin": tin(x[1])}, headers=H).status_code == 404     # not filed
+    assert c.post(f"/v1/claims/{x[0]}/appeals?dry_run=true", json={**b, "level": "L2"}, headers=H).status_code == 409                  # validation still runs
+    r = c.post(f"/v1/claims/{x[0]}/appeals", json=b, headers=H); assert r.status_code == 201 and r.json()["dry_run"] is False and r.json()["appeal_id"] == aid
+def test_dry_run_payment_correction_and_availability(fresh, con, tin):
+    c, H = fresh; x = claim(con, "PPI-03"); b = {"npi": x[1], "tin": tin(x[1]), "issue_type": "DISPUTED_RECOUPMENT"}
+    r = c.post(f"/v1/claims/{x[0]}/payment-corrections?dry_run=true", json=b, headers=H); assert r.status_code == 201 and r.json()["dry_run"] and "Preview only" in r.json()["message"]
+    r = c.post(f"/v1/claims/{x[0]}/payment-corrections", json=b, headers=H); assert r.json()["already_open"] is False and r.json()["dry_run"] is False
+    n, loc = gap_loc(con); r = c.put(f"/v1/providers/{n}/locations/{loc}/availability?dry_run=true", json={"tin": tin(n), "accepting_new_patients": True, "schedule": SCHED}, headers=H); assert r.status_code == 200 and r.json()["dry_run"]
+    assert c.get(f"/v1/providers/{n}/onboarding", params={"tin": tin(n)}, headers=H).json()["locations"] and any(l["needs_attention"] for l in c.get(f"/v1/providers/{n}/onboarding", params={"tin": tin(n)}, headers=H).json()["locations"])

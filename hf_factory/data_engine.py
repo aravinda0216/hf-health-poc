@@ -42,7 +42,7 @@ class DataRun:
     def s3(self):
         # s3: reference data (providers, networks, locations).
         ref.generate(self.ctx, self.sink, self.vol); self.done.append("s3"); self._stamp("s3 reference data")
-        return self._count(["plan", "provider", "practice_location", "network_participation", "ref_code"])
+        return self._count(["plan", "provider", "practice_location", "appointment_slot", "network_participation", "ref_code"])
 
     def s4(self):
         # s4: members, plans, accumulators, PCP assignment and care gaps.

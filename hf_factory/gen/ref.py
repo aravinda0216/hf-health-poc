@@ -93,6 +93,20 @@ def pools(P, n, plan_idx):
       oon_pro=[p["k"] for p in sub if p["kind"] in ("PCP","SPECIALIST") and not ok(p) and p["status"] == "ACTIVE" and p["part"][plan_idx]["status"] != "PARTICIPATING"],
       **{t.lower(): [p["k"] for p in sub if p["kind"] == t and ok(p)] for t in ("HOSPITAL","SNF","HOME_HEALTH","PHARMACY","IMAGING","LAB","URGENT_CARE")})
 
+# MAS: appointment slots for one location. Weekdays only, 0-4 half-hour slots per day from 08:00, for the 14 days after as_of_date.
+# Every value derives from (seed, provider k, location li, day), so the same dataset always offers the same slots.
+def slots(ctx, sink, k, li, loc_id, npi):
+    from datetime import timedelta
+    n = 0
+    for dd in range(1, 15):
+        day = ctx.as_of + timedelta(days=dd)
+        if day.weekday() >= 5: continue
+        r = ctx.rng("s3", "slots", k * 100 + li * 20 + dd)
+        for t in sorted({r.i(0, 15) for _ in range(r.i(0, 4))}):
+            start = f"{day.isoformat()}T{8 + t // 2:02d}:{(t % 2) * 30:02d}:00"
+            sink.emit("appointment_slot", k * 1000 + li * 500 + n, "BASE", slot_id=ctx.id("appointment_slot", k, f"{li}-{dd}-{t}"), npi=npi, location_id=loc_id, slot_start=start,
+                      duration_min=30, visit_type=r.weighted([("IN_PERSON", 80), ("TELEHEALTH", 20)]), status="OPEN"); n += 1
+
 # Emit plans, providers, participation rows, locations and the code reference table.
 def generate(ctx, sink, vol):
     for p in plan_rows(ctx):
@@ -124,6 +138,9 @@ def generate(ctx, sink, vol):
                       zip=f"{c[2]}{r.i(0,99):02d}", lat=round(c[3] + r.u() / 10, 4), lon=round(c[4] + r.u() / 10, 4), phone=f"555-01{r.i(0,99):02d}",
                       accepting_new_patients=r.chance(.7), accessibility=r.pick([["WHEELCHAIR"],["WHEELCHAIR","ASL"],[],["TTY"]]), telehealth=r.chance(.5),
                       last_verified_dt=ctx.d(-(r.i(91, 400) if stale else r.i(1, 89))), availability_loaded=not (k == 16 and li == 1), added_dt=(ctx.d(-3) if (k == 16 and li == 1) else None))
+            # MAS: open appointment slots for the next 14 days at this location (PCP / specialist, active, availability loaded). Every 13th provider (k % 13 == 5) has none: guaranteed "no availability" case.
+            if p["kind"] in ("PCP", "SPECIALIST") and p["status"] == "ACTIVE" and k % 13 != 5 and not (k == 16 and li == 1):
+                slots(ctx, sink, k, li, ctx.id("practice_location", k, li), p["npi"])
     # Reference tables: contract rates here are what rule F-02 recomputes allowed amounts from.
     # reference codes
     i = 0

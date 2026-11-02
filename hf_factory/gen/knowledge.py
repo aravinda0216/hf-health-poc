@@ -203,6 +203,93 @@ SOP.update({
  "PON": dict(steps=["Disclose that this is an AI assistant", "verifyIdentity with NPI and TIN", "getProviderOnboarding for stage, pending items and locations", "Explain the stage, next step and expected live date as an estimate", "updateLocationAvailability when the caller supplies a schedule and access details", "Escalate a go-live claims load lag to Network Operations"],
              tools=["verifyIdentity","getProviderOnboarding","updateLocationAvailability","searchKnowledge"], verification=["NPI","TIN"], esc=["contract negotiation","expedite requests","effective-date commitments","claims load lag"], queue="NETWORK_OPERATIONS",
              forbid=["promise effective dates","approve participation"])})
+
+# ---- Member-facing knowledge (MBN, MCI, MPS, MPC, MAS). Plain language, reading grade ~7. Answers are grounded in the Member Guides below.
+MEMBER_GUIDE = {
+ "Benefits and Cost Sharing": [
+  ("Your copays", "A copay is a fixed amount you pay for a visit. Your plan summary lists the copay for a primary care visit and for a specialist visit. Preventive care such as an annual wellness visit has no copay when you use an in-network provider."),
+  ("Deductible and coinsurance", "Your deductible is the amount you pay before the plan starts to share costs, if your plan has one. Coinsurance is the percentage you pay after that. Your plan summary shows both."),
+  ("Out-of-pocket maximum", "The out-of-pocket maximum is the most you pay for covered in-network care in a plan year. After you reach it the plan pays 100 percent of covered in-network services for the rest of the year."),
+  ("How much you have used", "Your benefits page shows how much of your deductible and out-of-pocket maximum you have used this year, and how much is left. The totals update after claims are processed, so recent visits may not appear yet."),
+  ("Extra benefits and allowances", "Some plans include extras, such as a quarterly over-the-counter allowance, a yearly dental allowance and rides to appointments. Unused allowances usually do not carry over to the next period."),
+  ("Prior authorization for you", "Some services need approval from the plan before you receive them. Your provider asks for the approval. Emergency care never needs approval.")],
+ "Claims and Explanation of Benefits": [
+  ("What a claim status means", "Paid means the plan processed the claim and paid its share. Pended means the plan needs more information and is still working on it. Denied means the plan did not pay all or part of the claim."),
+  ("Your explanation of benefits", "An explanation of benefits, or EOB, shows what the provider billed, what the plan allowed, what the plan paid and what you may owe. An EOB is not a bill."),
+  ("When a claim is denied", "A denial notice gives the reason in plain words. Many denials are about paperwork, and your provider can fix them. If the reason says the provider is responsible, you should not be billed for that amount."),
+  ("Do not pay a denied amount yet", "If a claim was denied because of a provider billing error or a missing approval, wait for the plan to finish its review before paying the provider. Call us if you receive a bill you do not understand."),
+  ("Your appeal rights", "You can appeal a denial you disagree with. Your denial notice lists the deadline and how to appeal. Appeals are free, and you can ask someone you trust to help."),
+  ("Who can see your claims", "Only you, or someone you have authorized in writing, can see your claim details. A caregiver can see claim status if you gave permission for claims, and amounts if you also gave permission for billing.")],
+ "Finding a Provider": [
+  ("In-network providers", "In-network providers have a contract with your plan, so you pay the lowest cost. The provider search shows only in-network providers for your plan."),
+  ("Search by specialty and place", "You can search by specialty, language spoken and distance from your home. Results are listed from nearest to farthest."),
+  ("New patients and open panels", "A provider may not be accepting new patients. The search shows whether each location is accepting new patients, so you can choose one who is."),
+  ("Accessibility and telehealth", "Each location lists accessibility features such as wheelchair access and sign language, and whether video visits are offered."),
+  ("Directory accuracy", "Provider offices change often. The directory shows the date a location was last verified. If the date is old, call the office to confirm before you go."),
+  ("Out-of-network care", "Care from a provider outside your network may cost more or may not be covered. Emergency care is covered at the in-network level anywhere.")],
+ "Choosing and Changing a PCP": [
+  ("What a PCP does", "Your primary care provider, or PCP, is your main doctor. They handle routine care and refer you to specialists when you need one."),
+  ("How to change your PCP", "You can change your PCP at any time. Choose a PCP in your plan network who is accepting new patients and practices within 50 miles of your home."),
+  ("When the change starts", "A PCP change takes effect the next day. Your ID card is updated and a new card is mailed. Visits before the change date go to your previous PCP."),
+  ("Limits on changes", "You can make up to two PCP changes in a plan year. After that, call member services to ask for an exception."),
+  ("If a PCP panel is closed", "A PCP with a closed panel is not taking new patients, and you cannot choose them. A limited panel means the office accepts only some new patients, so the plan confirms with the office."),
+  ("Who can change a PCP for you", "A caregiver can change your PCP only if you gave them permission for PCP changes, and their consent is still valid.")],
+ "Appointments": [
+  ("Booking an appointment", "Choose an available time with an in-network provider. You receive a confirmation number. Bring your member ID card and a photo ID."),
+  ("Video visits", "If the provider offers video visits, the slot says telehealth. You get a link before the visit. Check your device and internet connection ahead of time."),
+  ("Changing or canceling", "You can cancel an appointment up to 24 hours before the start time without a fee. Cancel so another patient can use the time."),
+  ("If no times are open", "If a provider has no open times in the next two weeks, you can choose another in-network provider or ask for a call back from the office."),
+  ("Urgent and emergency care", "For an emergency, call 911 or go to the nearest emergency room. For care that cannot wait but is not an emergency, use urgent care. Routine booking is not for urgent problems."),
+  ("Who can book for you", "A caregiver can book appointments for you only if you gave them permission for appointments, and their consent is still valid.")]}
+
+FAQ_TOPICS_MEMBER = {
+ "MBN": [(["What is my primary care copay?","how much is a doctor visit","specialist visit cost"], ("MG","Benefits and Cost Sharing"), "Your copays"),
+         (["What is the out-of-pocket maximum?","most I pay in a year","what happens after I reach my maximum"], ("MG","Benefits and Cost Sharing"), "Out-of-pocket maximum"),
+         (["How much of my deductible have I used?","how much have I spent this year","what is left of my out-of-pocket limit"], ("MG","Benefits and Cost Sharing"), "How much you have used"),
+         (["Do I have an over-the-counter allowance?","dental allowance amount","does my plan cover rides"], ("MG","Benefits and Cost Sharing"), "Extra benefits and allowances"),
+         (["What is coinsurance?","what is a deductible","how does cost sharing work"], ("MG","Benefits and Cost Sharing"), "Deductible and coinsurance"),
+         (["Do I need approval for a service?","which services need prior authorization","is approval needed for an MRI"], ("MG","Benefits and Cost Sharing"), "Prior authorization for you")],
+ "MCI": [(["What does pended mean on my claim?","why is my claim still pending","claim status paid pended denied"], ("MG","Claims and Explanation of Benefits"), "What a claim status means"),
+         (["What is an EOB?","explanation of benefits meaning","is an EOB a bill"], ("MG","Claims and Explanation of Benefits"), "Your explanation of benefits"),
+         (["Why was my claim denied?","what does the denial reason mean","denial notice explanation"], ("MG","Claims and Explanation of Benefits"), "When a claim is denied"),
+         (["Should I pay a bill for a denied claim?","I got a bill for a denied claim","do I owe this denied amount"], ("MG","Claims and Explanation of Benefits"), "Do not pay a denied amount yet"),
+         (["How do I appeal a denial?","appeal deadline for members","can someone help me appeal"], ("MG","Claims and Explanation of Benefits"), "Your appeal rights"),
+         (["Can my daughter see my claims?","caregiver access to claims","who can see my claim amounts"], ("MG","Claims and Explanation of Benefits"), "Who can see your claims")],
+ "MPS": [(["How do I find a doctor in my network?","in-network providers near me","search for a specialist"], ("MG","Finding a Provider"), "In-network providers"),
+         (["Can I search by language?","find a Spanish-speaking doctor","search by distance"], ("MG","Finding a Provider"), "Search by specialty and place"),
+         (["Is this doctor taking new patients?","accepting new patients","open panel provider"], ("MG","Finding a Provider"), "New patients and open panels"),
+         (["Does the office have wheelchair access?","do they offer video visits","accessibility features of a clinic"], ("MG","Finding a Provider"), "Accessibility and telehealth"),
+         (["How current is the provider directory?","directory last verified date","is the address correct"], ("MG","Finding a Provider"), "Directory accuracy"),
+         (["What if I see an out-of-network doctor?","cost of out-of-network care","is out-of-network covered"], ("MG","Finding a Provider"), "Out-of-network care")],
+ "MPC": [(["What does a PCP do?","what is a primary care provider","why do I need a PCP"], ("MG","Choosing and Changing a PCP"), "What a PCP does"),
+         (["How do I change my PCP?","switch primary care doctor","choose a new PCP"], ("MG","Choosing and Changing a PCP"), "How to change your PCP"),
+         (["When does my new PCP start?","PCP change effective date","when do I get a new ID card"], ("MG","Choosing and Changing a PCP"), "When the change starts"),
+         (["How many times can I change my PCP?","limit on PCP changes","change PCP again"], ("MG","Choosing and Changing a PCP"), "Limits on changes"),
+         (["Why can't I pick this PCP?","closed panel PCP","limited panel meaning"], ("MG","Choosing and Changing a PCP"), "If a PCP panel is closed"),
+         (["Can my caregiver change my PCP?","caregiver permission to change PCP","authorized person PCP change"], ("MG","Choosing and Changing a PCP"), "Who can change a PCP for you")],
+ "MAS": [(["How do I book an appointment?","schedule a visit with my doctor","what do I bring to the visit"], ("MG","Appointments"), "Booking an appointment"),
+         (["How do video visits work?","telehealth appointment link","can I do my visit by video"], ("MG","Appointments"), "Video visits"),
+         (["How do I cancel an appointment?","cancel without a fee","change my appointment time"], ("MG","Appointments"), "Changing or canceling"),
+         (["There are no open appointment times","my doctor has no availability","what if no slots are open"], ("MG","Appointments"), "If no times are open"),
+         (["Can I book for an urgent problem?","emergency or urgent care","what if I need care today"], ("MG","Appointments"), "Urgent and emergency care"),
+         (["Can my caregiver book for me?","caregiver appointment permission","authorized person booking"], ("MG","Appointments"), "Who can book for you")]}
+FAQ_TOPICS.update(FAQ_TOPICS_MEMBER)
+SOP.update({
+ "MBN": dict(steps=["Disclose that this is an AI assistant", "verifyIdentity with member id, date of birth and last name (caregivers also give the relationship id and name)", "getMemberBenefits", "Explain copays, deductible, out-of-pocket maximum, amounts used and allowances", "searchKnowledge for plan questions"],
+             tools=["verifyIdentity","getMemberBenefits","searchKnowledge"], verification=["member_id","dob","last_name"], esc=["benefit disputes","coverage terminated","caregiver without BENEFITS scope"], queue="MEMBER_SERVICES",
+             forbid=["quote cost for a specific service","guarantee coverage","disclose without verification"]),
+ "MCI": dict(steps=["Disclose that this is an AI assistant", "verifyIdentity", "listMemberClaims or getMemberClaim", "Explain status and denial reason in plain words, and who is liable", "Tell the member not to pay a provider-liable denial", "searchKnowledge for appeal rights"],
+             tools=["verifyIdentity","listMemberClaims","getMemberClaim","searchKnowledge"], verification=["member_id","dob","last_name"], esc=["member received a bill","appeal request","billing details for a caregiver without BILLING scope"], queue="MEMBER_CLAIMS",
+             forbid=["promise payment","change a claim","show amounts to a caregiver without BILLING scope"]),
+ "MPS": dict(steps=["Disclose that this is an AI assistant", "verifyIdentity", "searchProviders with specialty, language and distance", "Read back the closest in-network results with distance and whether they accept new patients", "Mention the directory last verified date when it is old"],
+             tools=["verifyIdentity","searchProviders","searchKnowledge"], verification=["member_id","dob","last_name"], esc=["no in-network provider within the access standard","member needs urgent care"], queue="NETWORK_ACCESS",
+             forbid=["recommend a provider as better","list out-of-network providers as in network"]),
+ "MPC": dict(steps=["Disclose that this is an AI assistant", "verifyIdentity", "getMemberPcp", "searchProviders for a PCP", "changePcp with dry_run=true, confirm with the member, then changePcp", "Explain the effective date and the new ID card"],
+             tools=["verifyIdentity","getMemberPcp","searchProviders","changePcp","searchKnowledge"], verification=["member_id","dob","last_name"], esc=["third PCP change in a year","closed panel","caregiver without PCP_CHANGE scope"], queue="MEMBER_SERVICES",
+             forbid=["change a PCP without the member's confirmation","choose a PCP for the member"]),
+ "MAS": dict(steps=["Disclose that this is an AI assistant", "verifyIdentity", "getAppointmentSlots for the chosen provider", "bookAppointment with dry_run=true, confirm with the member, then bookAppointment", "Read back the confirmation number, time and location", "listMemberAppointments / cancelAppointment on request"],
+             tools=["verifyIdentity","getAppointmentSlots","bookAppointment","listMemberAppointments","cancelAppointment","searchKnowledge"], verification=["member_id","dob","last_name"], esc=["urgent symptoms","no slots","caregiver without APPOINTMENTS scope"], queue="MEMBER_SERVICES",
+             forbid=["book without the member's confirmation","give medical advice"])})
 # Caller personas used to tag FAQ entries and golden questions.
 PERSONAS = ["OFFICE","BILLING","REFERRAL","DISCHARGE"]
 
@@ -230,10 +317,11 @@ def run(ctx, sink, con, vol, members):
         elif t == "PA_POLICY": secs = pa_sections(a["key"], old)
         elif t == "CLAIMS_ADJ_POLICY": secs = claims_sections(a["key"], old)
         elif t in ("PLAN_SUMMARY", "BENEFIT_DOC"): secs = plan_sections(a["key"], t)
+        elif t == "MEMBER_GUIDE": secs = MEMBER_GUIDE[a["key"]]
         elif t == "AGENT_SOP": secs = [(f"Step {n}", s) for n, s in enumerate(SOP[a["key"]]["steps"], 1)]
-        else: secs = [(q[0] if isinstance(q, list) else q, "Answer grounded in the Provider Manual.") for q, *_ in FAQ_TOPICS[a["key"]]]
+        else: secs = [(q[0] if isinstance(q, list) else q, "Answer grounded in the " + ("Member Guide." if a["audience"] == "MEMBER" else "Provider Manual.")) for q, *_ in FAQ_TOPICS[a["key"]]]
         if old: secs = secs[:4]
-        path = {"PROVIDER_MANUAL": "Provider Manual", "PA_POLICY": "Prior Authorization", "CLAIMS_ADJ_POLICY": "Claims Adjudication"}.get(t, t.title())
+        path = {"PROVIDER_MANUAL": "Provider Manual", "PA_POLICY": "Prior Authorization", "CLAIMS_ADJ_POLICY": "Claims Adjudication", "MEMBER_GUIDE": "Member Guide"}.get(t, t.title())
         for n, (title, text) in enumerate(secs):
             cid = ctx.id("asset_chunk", idx, n)
             chunk_of[(idx, title)] = (cid, text)
@@ -254,6 +342,7 @@ def run(ctx, sink, con, vol, members):
             if k == "Prior Authorization and Referrals": L += [("DENIAL_CODE", "AUTH-" + c) for c in ("MED_NECESSITY","NOT_COVERED","ADMIN","ELIGIBILITY")]
         elif t in ("AGENT_SOP", "FAQ_LIBRARY"): L += [("USE_CASE", k)]
         elif t in ("PLAN_SUMMARY", "BENEFIT_DOC"): L += [("PLAN", ctx.id("plan", k))]
+        elif t == "MEMBER_GUIDE": L += [("USE_CASE", u) for u in {"Benefits and Cost Sharing": ["MBN"], "Claims and Explanation of Benefits": ["MCI"], "Finding a Provider": ["MPS"], "Choosing and Changing a PCP": ["MPC"], "Appointments": ["MAS"]}[k]]
         for n, (e, key) in enumerate(L):
             sink.emit("asset_link", idx, "BASE", link_id=ctx.id("asset_link", idx, n), asset_id=aid, linked_entity=e, linked_key=key)
         L = []
@@ -270,14 +359,14 @@ def run(ctx, sink, con, vol, members):
     def resolve(ref):
         if isinstance(ref, str): return AS.manual_idx(ref)
         kind, key = ref
-        return AS.claims_idx(key) if kind == "CL" else AS.pa_idx(key) if kind == "PA" else AS.ps_idx(key)
-    qn = 0
+        return AS.claims_idx(key) if kind == "CL" else AS.pa_idx(key) if kind == "PA" else AS.mg_idx(key) if kind == "MG" else AS.ps_idx(key)
+    qn = 0; fq = 0
     for ui, u in enumerate(AS.USE_CASES):
         topics = FAQ_TOPICS[u]; faq_ids = []
         for t, (qs, ref, title) in enumerate(topics):
             ai = resolve(ref); cid, text = chunk_of[(ai, title)]
             for v in range(3):
-                n = ui * 30 + t * 3 + v
+                n = fq; fq += 1                    # running FAQ counter (member use cases have 6 topics, provider ones 10)
                 persona_tags = sorted({PERSONAS[(t + v) % 4], PERSONAS[(t + v + 1) % 4]})
                 variants = [qs[(v + k) % len(qs)] for k in range(2 + (v % 2))]
                 sink.emit("faq_entry", n, u, faq_id=ctx.id("faq_entry", n), asset_id=ctx.id("knowledge_asset", AS.faq_idx(u)), question_variants=variants, answer=text, persona_tags=persona_tags, use_case_code=u)
@@ -287,7 +376,7 @@ def run(ctx, sink, con, vol, members):
             for q in qs:
                 sink.emit("qa_golden", qn, u, qa_id=ctx.id("qa_golden", qn), use_case_code=u, persona=PERSONAS[k % 4], question=q, expected_chunk_ids=[cid], expected_behavior="ANSWER", difficulty="EASY"); qn += 1; k += 1
         for t in range(15):                            # 15 MULTI_HOP: two topics combined
-            a, b = faq_ids[t % 10], faq_ids[(t + 3) % 10]
+            a, b = faq_ids[t % len(faq_ids)], faq_ids[(t + 3) % len(faq_ids)]
             sink.emit("qa_golden", qn, u, qa_id=ctx.id("qa_golden", qn), use_case_code=u, persona=PERSONAS[t % 4], question=f"{a[0][0]} Also, {b[0][0][0].lower() + b[0][0][1:]}", expected_chunk_ids=[a[1], b[1]],
                       expected_behavior="ANSWER", difficulty="MULTI_HOP"); qn += 1
         for t in range(8):

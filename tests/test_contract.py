@@ -105,7 +105,7 @@ def test_knowledge_returns_only_active_provider_assets(client, hdr, con):
 def test_knowledge_golden_abstain_and_recall(client, hdr, con):
     n_un = ok_un = n_ez = ok_ez = 0
     for uc, q, d in con.execute("SELECT use_case_code, question, difficulty FROM qa_golden WHERE difficulty IN ('UNANSWERABLE','EASY')").fetchall():
-        a = client.get("/v1/knowledge/search", params={"q": q, "use_case": uc}, headers=hdr).json()["abstain"]
+        a = client.get("/v1/knowledge/search", params={"q": q, "use_case": uc, "audience": "MEMBER" if uc in ("MBN", "MCI", "MPS", "MPC", "MAS") else "PROVIDER"}, headers=hdr).json()["abstain"]
         if d == "UNANSWERABLE": n_un += 1; ok_un += a
         else: n_ez += 1; ok_ez += (not a)
     assert ok_un == n_un, f"{n_un-ok_un} unanswerable questions were answered"
