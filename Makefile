@@ -11,3 +11,8 @@ test:         ; $(PY) -m pytest tests -q -p no:cacheprovider -W ignore
 repro:        ; $(PY) -m hf_factory.repro --members 1000
 # Start the API on :8080 against the dev database (fault injection on; HF_FAULT=off disables it).
 serve:        ; HF_DB=out/dev/factory.db $(PY) -m uvicorn hf_factory.api.app:from_env --factory --port 8080
+
+# Control plane (stage job endpoints for s3-s8) on :9000. Token from HF_CONTROL_TOKEN (demo default). Runs are stored under out/runs.
+serve-control: ; HF_RUNS_DIR=out/runs $(PY) -m uvicorn hf_factory.control.app:from_env --factory --port 9000
+# Drive a running control plane through s3-s8 for the sample blueprint (1,000 members).
+orchestrate:   ; $(PY) -m hf_factory.orchestrator_client --members 1000

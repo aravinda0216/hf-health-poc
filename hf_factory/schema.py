@@ -113,7 +113,8 @@ def index_ddl():
 def connect(path, fresh=False):
     import os
     if fresh and os.path.exists(path): os.remove(path)
-    con = sqlite3.connect(path)
+    # check_same_thread=False: the control plane runs each stage on a worker thread and reuses the connection across stages; access is serialised by a per-run lock.
+    con = sqlite3.connect(path, check_same_thread=False)
     # The database is rebuilt from the seed every run, so durability is traded for speed (no journal, no fsync).
     con.execute("PRAGMA journal_mode=OFF"); con.execute("PRAGMA synchronous=OFF")
     return con

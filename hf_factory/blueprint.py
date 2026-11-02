@@ -43,13 +43,38 @@ def finalize(bp):
     bp["blueprint_hash"] = sha(bp)
     return bp
 
-def job_spec(bp, stage, entities, extra=None):
-    """Stub of the orchestrator slicing the blueprint into a per-stage job spec (shape from architecture doc)."""
+def stage_seed(root_seed, stage_id):
+    """Per-stage seed carried in every job payload. The control plane recomputes it and rejects a payload whose value differs."""
     from .common import h64
+    return h64(root_seed, stage_id) & 0xFFFFFFFF
+
+def job_spec(bp, stage, entities, extra=None, run_id=None):
+    """Stub of the orchestrator slicing the blueprint into a per-stage job spec (shape from architecture doc).
+    Carries everything the data engine needs to rebuild the run without the blueprint: dataset id, use cases, LOB mix, versions and both hashes."""
     r, ds = bp["repeatability"], bp["data_spec"]
-    return {"job": stage["job"], "stage": stage["id"], "root_seed": r["root_seed"], "stage_seed": h64(r["root_seed"], stage["id"]) & 0xFFFFFFFF,
-            "as_of_date": r["as_of_date"], "catalog_version": r["catalog_version"], "id_strategy": r["id_strategy"], "entities": entities,
+    return {"job": stage["job"], "stage": stage["id"], "run_id": run_id or "run_" + bp["blueprint_hash"][7:19],
+            "root_seed": r["root_seed"], "stage_seed": stage_seed(r["root_seed"], stage["id"]),
+            "as_of_date": r["as_of_date"], "catalog_version": r["catalog_version"], "rule_set_version": r["rule_set_version"], "generator_version": r["generator_version"],
+            "id_strategy": r["id_strategy"], "dataset_id": ds["dataset_id"], "use_cases": bp["scope"]["use_cases"], "lob_mix": ds["distributions"]["lob_mix"],
+            "blueprint_hash": bp["blueprint_hash"], "data_spec_hash": ds["data_spec_hash"], "entities": entities,
             "volumes": ds["volumes"], "edge_case_pct": ds["edge_case_pct"], "rules": stage.get("rules", []), **(extra or {})}
+
+def api_job_spec(bp, run_id=None):
+    """Stub of the orchestrator's s8 job payload (shape from the architecture doc)."""
+    a = bp["api_spec"]
+    return {"job": "api_generate_and_deploy", "stage": "s8", "run_id": run_id or "run_" + bp["blueprint_hash"][7:19], "style": a["style"], "base_path": a["base_path"],
+            "use_cases": bp["scope"]["use_cases"], "auth": {"type": a["auth"], "secret_ref": "env:HF_CLIENT_SECRET"}, "rate_limit": {"per_client_rpm": a["rate_limit_rpm"]},
+            "fault_injection": a["fault_injection"], "agent_tools": a["agent_tools"]}
+
+def from_job(j):
+    """Rebuild the data-relevant part of a blueprint from an s3 job payload (what the control plane does, since it only receives job payloads).
+    The data_spec_hash is recomputed from the payload and must equal the one the orchestrator sent."""
+    bp = {"blueprint_id": "bp-" + j["run_id"], "scope": {"use_cases": j["use_cases"]},
+          "repeatability": {"root_seed": j["root_seed"], "as_of_date": j["as_of_date"], "catalog_version": j["catalog_version"], "rule_set_version": j["rule_set_version"],
+                            "generator_version": j["generator_version"], "id_strategy": j["id_strategy"]},
+          "data_spec": {"dataset_id": j["dataset_id"], "volumes": j["volumes"], "edge_case_pct": j["edge_case_pct"], "distributions": {"lob_mix": j["lob_mix"]}}}
+    finalize(bp)
+    return bp
 
 STAGES = [
  {"id":"s3","job":"generate_reference_data","rules":["R-04","F-04","P-02"]},

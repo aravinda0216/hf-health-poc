@@ -172,10 +172,11 @@ def privacy_scan(con):
             "quasi_identifier_cells": len(cells), "cells_below_11": sum(1 for c in cells if c < 11), "note": "aggregate statistics suppress cells below 11 (P-04)"}
 
 # Checksum = sum of 64-bit row hashes mod 2**64, so it ignores row order. The repro tool compares these across runs.
-def checksums(con, upto=None):
+def checksums(con, upto=None, tables=None):
     """Order-independent per-entity checksum: sum of 64-bit row hashes. upto = {table: n} limits to row_idx < n (prefix check)."""
     out = {}
     for t, spec in schema.TABLES.items():
+        if tables is not None and t not in tables: continue   # per-stage reporting asks only for the stage's own entities
         cols = [c for c, _ in spec["cols"]]; s = n = 0; mx = -1
         where = f" WHERE row_idx < {int(upto[t])}" if upto and t in upto else ""
         for r in con.execute(f"SELECT {','.join(cols)} FROM {t}{where}"):

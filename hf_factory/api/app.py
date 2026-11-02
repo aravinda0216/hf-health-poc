@@ -37,6 +37,8 @@ class Config:
     fault_latency_p95_ms: int = 450
     rate_limit_rpm: Optional[int] = None
     max_elig_batch: int = MAX_ELIG_BATCH
+    # s8 payload switch: when set, only these operationIds are exposed (see api/catalog.py); None exposes everything.
+    enabled_ops: Optional[set] = None
 
 # Raised anywhere in a handler; one exception handler turns it into the standard error body (code, message, details, is_synthetic).
 class ApiError(Exception):
@@ -426,6 +428,9 @@ def create_app(cfg: Config) -> FastAPI:
     # The appeals, payments and onboarding endpoints live in provider_ext.py; they share this module's helpers through a small namespace.
     from . import provider_ext
     provider_ext.register(router, SimpleNamespace(con_ro=con_ro, state=state, verify_provider=verify_provider, src=src, SRC_BASE=SRC_BASE, AS_OF=AS_OF, NOW=NOW, lock=lock, prot=prot, ERR=ERR, GUARD=GUARD, ApiError=ApiError, digits=digits))
+    # Generic backend: drop routes whose operationId is not enabled for this deployment (before the router is mounted), so the OpenAPI spec and the tool manifest only describe what is live.
+    if cfg.enabled_ops is not None:
+        router.routes[:] = [r for r in router.routes if getattr(r, "operation_id", None) is None or r.operation_id in cfg.enabled_ops]
     app.include_router(router)
     app.state.verify_provider = verify_provider
     return app
@@ -437,5 +442,9 @@ def _erfinv(x):
 
 # Entry point for `make serve` (uvicorn --factory). Reads HF_DB, HF_AUDIT, HF_FAULT and rate-limit settings from the environment.
 def from_env():
-    cfg = Config(db_path=os.environ["HF_DB"], audit_path=os.environ.get("HF_AUDIT", ""), fault_enabled=os.environ.get("HF_FAULT", "on") == "on", rate_limit_rpm=int(os.environ.get("HF_RPM", "600")))
+    # HF_ENABLED_OPS (comma list of operationIds) restricts the exposed endpoints; the control plane's s8 result prints a ready-made run_command.
+    ops = os.environ.get("HF_ENABLED_OPS")
+    cfg = Config(db_path=os.environ["HF_DB"], state_path=os.environ.get("HF_STATE_DB", ""), audit_path=os.environ.get("HF_AUDIT", ""), fault_enabled=os.environ.get("HF_FAULT", "on") == "on",
+                 fault_error_pct=float(os.environ.get("HF_FAULT_ERROR_PCT", "1")), fault_latency_p95_ms=int(os.environ.get("HF_FAULT_P95_MS", "450")),
+                 rate_limit_rpm=int(os.environ.get("HF_RPM", "600")), enabled_ops=set(ops.split(",")) if ops else None)
     return create_app(cfg)
